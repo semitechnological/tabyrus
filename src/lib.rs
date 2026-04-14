@@ -6,11 +6,13 @@ use std::sync::{Mutex, OnceLock};
 static COMPLETIONS: OnceLock<HashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
 static ZETA_MODEL: OnceLock<ZetaModel> = OnceLock::new();
 static QWEN_MODEL: OnceLock<QwenModel> = OnceLock::new();
+static GEMMA_MODEL: OnceLock<GemmaModel> = OnceLock::new();
 static CURRENT_MODEL: OnceLock<Mutex<CompletionModel>> = OnceLock::new();
 
 enum CompletionModel {
     Zeta2,
     Qwen35,
+    Gemma4,
 }
 
 impl CompletionModel {
@@ -18,6 +20,7 @@ impl CompletionModel {
         match self {
             CompletionModel::Zeta2 => "zeta-2",
             CompletionModel::Qwen35 => "qwen-3.5",
+            CompletionModel::Gemma4 => "gemma-4",
         }
     }
 }
@@ -35,6 +38,14 @@ struct QwenModel {
     model_name: String,
     parameter_count: usize,
     vocab_size: usize,
+}
+
+#[allow(dead_code)]
+struct GemmaModel {
+    model_name: String,
+    parameter_count: usize,
+    vocab_size: usize,
+    is_multimodal: bool,
 }
 
 #[repr(C)]
@@ -146,6 +157,17 @@ pub extern "C" fn otto_initialize_completions() {
         }
     });
 
+    println!("Pre-loading Gemma 4 model (mlx-community/gemma-4-e2b-it-4bit)...");
+    GEMMA_MODEL.get_or_init(|| {
+        println!("Gemma 4 model metadata loaded");
+        GemmaModel {
+            model_name: "mlx-community/gemma-4-e2b-it-4bit".to_string(),
+            parameter_count: 1_000_000_000,
+            vocab_size: 256000,
+            is_multimodal: true,
+        }
+    });
+
     CURRENT_MODEL.get_or_init(|| Mutex::new(CompletionModel::Zeta2));
 }
 
@@ -160,6 +182,21 @@ fn load_zeta_model() -> Result<ZetaModel, Box<dyn std::error::Error>> {
         parameter_count: 1_000_000_000,
         vocab_size: 200000,
         is_edit_model: true,
+    })
+}
+
+fn load_gemma_model() -> Result<GemmaModel, Box<dyn std::error::Error>> {
+    println!("Loading Gemma 4 from HuggingFace...");
+    println!("Model: mlx-community/gemma-4-e2b-it-4bit");
+    println!("Specs: 1B parameters, instruction-tuned, 4-bit quantization, MLX optimized");
+    println!("Base: google/gemma-4-e2b-it (multimodal)");
+    println!("Size: ~3.58 GB");
+
+    Ok(GemmaModel {
+        model_name: "mlx-community/gemma-4-e2b-it-4bit".to_string(),
+        parameter_count: 1_000_000_000,
+        vocab_size: 256000,
+        is_multimodal: true,
     })
 }
 
@@ -363,6 +400,10 @@ pub extern "C" fn otto_set_model(model_name: *const c_char) {
             println!("Switching to Qwen3.5 model");
             CompletionModel::Qwen35
         }
+        "gemma" | "gemma-4" | "gemma4" | "mlx-community/gemma-4-e2b-it-4bit" => {
+            println!("Switching to Gemma 4 model");
+            CompletionModel::Gemma4
+        }
         _ => {
             println!("Unknown model {}, defaulting to zeta-2", model);
             CompletionModel::Zeta2
@@ -429,6 +470,12 @@ fn get_ml_completion(text: &str) -> Option<CompletionResult> {
                             vocab_size: 151936,
                         });
                         "qwen-3.5"
+                    }
+                    CompletionModel::Gemma4 => {
+                        if GEMMA_MODEL.get().is_none() {
+                            return None;
+                        }
+                        "gemma-4"
                     }
                 }
             } else {
@@ -806,5 +853,9 @@ mod tests {
         otto_set_model(CString::new("qwen-3.5").unwrap().as_ptr());
         let model = unsafe { CStr::from_ptr(otto_get_current_model()) };
         assert_eq!(model.to_str().unwrap(), "qwen-3.5");
+
+        otto_set_model(CString::new("gemma-4").unwrap().as_ptr());
+        let model = unsafe { CStr::from_ptr(otto_get_current_model()) };
+        assert_eq!(model.to_str().unwrap(), "gemma-4");
     }
 }

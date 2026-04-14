@@ -11,6 +11,7 @@ import OttoBackend
 enum OttoModel: String, Codable, CaseIterable {
     case zeta2 = "zeta-2"
     case qwen35 = "qwen-3.5"
+    case gemma4 = "gemma-4"
     
     var displayName: String {
         switch self {
@@ -18,6 +19,8 @@ enum OttoModel: String, Codable, CaseIterable {
             return "Zeta-2 (Recommended)"
         case .qwen35:
             return "Qwen 3.5"
+        case .gemma4:
+            return "Gemma 4"
         }
     }
     
@@ -27,6 +30,8 @@ enum OttoModel: String, Codable, CaseIterable {
             return "NexVeridian/zeta-2-4bit: Code editing specialist with next-edit-prediction"
         case .qwen35:
             return "Qwen3.5-0.8B-OptiQ-4bit: General purpose language model"
+        case .gemma4:
+            return "mlx-community/gemma-4-e2b-it-4bit: Google's Gemma 4 instruction-tuned, multimodal (~3.6GB)"
         }
     }
     
@@ -36,6 +41,8 @@ enum OttoModel: String, Codable, CaseIterable {
             return "NexVeridian/zeta-2-4bit"
         case .qwen35:
             return "Qwen3.5-0.8B"
+        case .gemma4:
+            return "mlx-community/gemma-4-e2b-it-4bit"
         }
     }
 }
