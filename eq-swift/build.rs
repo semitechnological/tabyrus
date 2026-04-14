@@ -1,7 +1,7 @@
 use std::{env, fs, path::PathBuf, process::Command};
 
 fn main() {
-    let udl = "src/test.udl";
+    let udl = "src/eq_swift.udl";
     println!("cargo:rerun-if-changed={udl}");
     println!("cargo:rerun-if-env-changed=UNIFFI_BINDGEN");
 
