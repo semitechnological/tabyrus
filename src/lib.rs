@@ -44,6 +44,7 @@ impl CompletionModel {
     }
 }
 
+#[allow(dead_code)]
 struct ZetaModel {
     model_name: String,
     parameter_count: usize,
@@ -52,6 +53,7 @@ struct ZetaModel {
     is_loaded: bool,
 }
 
+#[allow(dead_code)]
 struct QwenModel {
     model_name: String,
     parameter_count: usize,
@@ -59,6 +61,7 @@ struct QwenModel {
     is_loaded: bool,
 }
 
+#[allow(dead_code)]
 struct GemmaModel {
     model_name: String,
     parameter_count: usize,
@@ -230,7 +233,7 @@ fn ensure_cache_dir_exists() -> std::io::Result<()> {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_set_hf_token(token: *const c_char) {
+pub unsafe extern "C" fn otto_set_hf_token(token: *const c_char) {
     if token.is_null() {
         HF_TOKEN.get_or_init(|| None);
         println!("HuggingFace token cleared");
@@ -245,7 +248,9 @@ pub extern "C" fn otto_set_hf_token(token: *const c_char) {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_download_model(model_name: *const c_char) -> *mut ModelDownloadResult {
+pub unsafe extern "C" fn otto_download_model(
+    model_name: *const c_char,
+) -> *mut ModelDownloadResult {
     let c_str = unsafe { CStr::from_ptr(model_name) };
     let model_str = match c_str.to_str() {
         Ok(s) => s,
@@ -419,7 +424,7 @@ fn calculate_dir_size(path: &PathBuf) -> u64 {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_free_model_download_result(result: *mut ModelDownloadResult) {
+pub unsafe extern "C" fn otto_free_model_download_result(result: *mut ModelDownloadResult) {
     if result.is_null() {
         return;
     }
@@ -438,7 +443,7 @@ pub extern "C" fn otto_free_model_download_result(result: *mut ModelDownloadResu
 }
 
 #[no_mangle]
-pub extern "C" fn otto_is_model_downloaded(model_name: *const c_char) -> bool {
+pub unsafe extern "C" fn otto_is_model_downloaded(model_name: *const c_char) -> bool {
     let c_str = unsafe { CStr::from_ptr(model_name) };
     let model_str = match c_str.to_str() {
         Ok(s) => s,
@@ -459,7 +464,7 @@ pub extern "C" fn otto_is_model_downloaded(model_name: *const c_char) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_get_model_cache_path(model_name: *const c_char) -> *const c_char {
+pub unsafe extern "C" fn otto_get_model_cache_path(model_name: *const c_char) -> *const c_char {
     let c_str = unsafe { CStr::from_ptr(model_name) };
     let model_str = match c_str.to_str() {
         Ok(s) => s,
@@ -482,7 +487,7 @@ pub extern "C" fn otto_get_model_cache_path(model_name: *const c_char) -> *const
 }
 
 #[no_mangle]
-pub extern "C" fn otto_initialize_completions() {
+pub unsafe extern "C" fn otto_initialize_completions() {
     let mut completions = HashMap::new();
 
     completions.insert("the", vec!["the", "then", "there", "these", "they"]);
@@ -556,7 +561,7 @@ pub extern "C" fn otto_initialize_completions() {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_get_completion_prefix(text: *const c_char) -> *const c_char {
+pub unsafe extern "C" fn otto_get_completion_prefix(text: *const c_char) -> *const c_char {
     let c_str = unsafe { CStr::from_ptr(text) };
     let text_str = match c_str.to_str() {
         Ok(s) => s,
@@ -576,7 +581,7 @@ pub extern "C" fn otto_get_completion_prefix(text: *const c_char) -> *const c_ch
 }
 
 #[no_mangle]
-pub extern "C" fn otto_get_completion_suggestion(text: *const c_char) -> *const c_char {
+pub unsafe extern "C" fn otto_get_completion_suggestion(text: *const c_char) -> *const c_char {
     let c_str = unsafe { CStr::from_ptr(text) };
     let text_str = match c_str.to_str() {
         Ok(s) => s,
@@ -596,7 +601,7 @@ pub extern "C" fn otto_get_completion_suggestion(text: *const c_char) -> *const 
 }
 
 #[no_mangle]
-pub extern "C" fn otto_get_completion_confidence(text: *const c_char) -> f32 {
+pub unsafe extern "C" fn otto_get_completion_confidence(text: *const c_char) -> f32 {
     let c_str = unsafe { CStr::from_ptr(text) };
     let text_str = match c_str.to_str() {
         Ok(s) => s,
@@ -615,7 +620,7 @@ pub extern "C" fn otto_get_completion_confidence(text: *const c_char) -> f32 {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_is_completion_ml_based(text: *const c_char) -> bool {
+pub unsafe extern "C" fn otto_is_completion_ml_based(text: *const c_char) -> bool {
     let c_str = unsafe { CStr::from_ptr(text) };
     let text_str = match c_str.to_str() {
         Ok(s) => s,
@@ -626,7 +631,10 @@ pub extern "C" fn otto_is_completion_ml_based(text: *const c_char) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_free_completion_strings(prefix: *const c_char, suggestion: *const c_char) {
+pub unsafe extern "C" fn otto_free_completion_strings(
+    prefix: *const c_char,
+    suggestion: *const c_char,
+) {
     if !prefix.is_null() {
         unsafe { drop(CString::from_raw(prefix as *mut c_char)) };
     }
@@ -636,7 +644,7 @@ pub extern "C" fn otto_free_completion_strings(prefix: *const c_char, suggestion
 }
 
 #[no_mangle]
-pub extern "C" fn otto_free_grammar_result(result: *mut GrammarResult) {
+pub unsafe extern "C" fn otto_free_grammar_result(result: *mut GrammarResult) {
     if result.is_null() {
         return;
     }
@@ -655,7 +663,7 @@ pub extern "C" fn otto_free_grammar_result(result: *mut GrammarResult) {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_free_code_reshape_result(result: *mut CodeReshapeResult) {
+pub unsafe extern "C" fn otto_free_code_reshape_result(result: *mut CodeReshapeResult) {
     if result.is_null() {
         return;
     }
@@ -674,7 +682,7 @@ pub extern "C" fn otto_free_code_reshape_result(result: *mut CodeReshapeResult) 
 }
 
 #[no_mangle]
-pub extern "C" fn otto_check_grammar(text: *const c_char) -> *mut GrammarResult {
+pub unsafe extern "C" fn otto_check_grammar(text: *const c_char) -> *mut GrammarResult {
     let c_str = unsafe { CStr::from_ptr(text) };
     let text_str = match c_str.to_str() {
         Ok(s) => s,
@@ -701,7 +709,7 @@ pub extern "C" fn otto_check_grammar(text: *const c_char) -> *mut GrammarResult 
 }
 
 #[no_mangle]
-pub extern "C" fn otto_reshape_code(
+pub unsafe extern "C" fn otto_reshape_code(
     code: *const c_char,
     operation: *const c_char,
 ) -> *mut CodeReshapeResult {
@@ -737,7 +745,7 @@ pub extern "C" fn otto_reshape_code(
 }
 
 #[no_mangle]
-pub extern "C" fn otto_set_model(model_name: *const c_char) {
+pub unsafe extern "C" fn otto_set_model(model_name: *const c_char) {
     let c_str = unsafe { CStr::from_ptr(model_name) };
     let model = match c_str.to_str() {
         Ok(s) => s,
@@ -771,7 +779,7 @@ pub extern "C" fn otto_set_model(model_name: *const c_char) {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_set_code_reshape_enabled(enabled: bool) {
+pub unsafe extern "C" fn otto_set_code_reshape_enabled(enabled: bool) {
     if let Some(flag) = CODE_RESHAPE_ENABLED.get() {
         flag.store(enabled, std::sync::atomic::Ordering::Relaxed);
         println!(
@@ -782,7 +790,7 @@ pub extern "C" fn otto_set_code_reshape_enabled(enabled: bool) {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_set_grammar_enabled(enabled: bool) {
+pub unsafe extern "C" fn otto_set_grammar_enabled(enabled: bool) {
     if let Some(flag) = GRAMMAR_ENABLED.get() {
         flag.store(enabled, std::sync::atomic::Ordering::Relaxed);
         println!(
@@ -793,7 +801,7 @@ pub extern "C" fn otto_set_grammar_enabled(enabled: bool) {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_get_current_model() -> *const c_char {
+pub unsafe extern "C" fn otto_get_current_model() -> *const c_char {
     let model_name = match CURRENT_MODEL.get() {
         Some(lock) => {
             if let Ok(guard) = lock.lock() {
@@ -808,7 +816,7 @@ pub extern "C" fn otto_get_current_model() -> *const c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn otto_get_current_model_repo_id() -> *const c_char {
+pub unsafe extern "C" fn otto_get_current_model_repo_id() -> *const c_char {
     let repo_id = match CURRENT_MODEL.get() {
         Some(lock) => {
             if let Ok(guard) = lock.lock() {
@@ -928,10 +936,8 @@ fn get_ml_completion(text: &str) -> Option<CompletionResult> {
     ]
     .into();
 
-    let combined_patterns: HashMap<&str, Vec<&str>> = code_patterns
-        .into_iter()
-        .chain(text_patterns.into_iter())
-        .collect();
+    let combined_patterns: HashMap<&str, Vec<&str>> =
+        code_patterns.into_iter().chain(text_patterns).collect();
 
     if let Some(candidates) = combined_patterns.get(prefix.as_str()) {
         if let Some(best) = candidates.first() {
@@ -1154,7 +1160,7 @@ mod tests {
 
     fn ensure_initialized() {
         TESTS_INITIALIZED.call_once(|| {
-            otto_initialize_completions();
+            unsafe { otto_initialize_completions() };
         });
     }
 
@@ -1163,53 +1169,53 @@ mod tests {
         ensure_initialized();
 
         let test_text = CString::new("the").unwrap();
-        let prefix = otto_get_completion_prefix(test_text.as_ptr());
-        let suggestion = otto_get_completion_suggestion(test_text.as_ptr());
+        let prefix = unsafe { otto_get_completion_prefix(test_text.as_ptr()) };
+        let suggestion = unsafe { otto_get_completion_suggestion(test_text.as_ptr()) };
 
         assert!(!prefix.is_null());
         assert!(!suggestion.is_null());
 
-        otto_free_completion_strings(prefix, suggestion);
+        unsafe { otto_free_completion_strings(prefix, suggestion) };
     }
 
     #[test]
     fn test_grammar_check() {
         ensure_initialized();
-        otto_set_grammar_enabled(true);
+        unsafe { otto_set_grammar_enabled(true) };
 
         let test_text = CString::new("dont").unwrap();
-        let result = otto_check_grammar(test_text.as_ptr());
+        let result = unsafe { otto_check_grammar(test_text.as_ptr()) };
 
         assert!(!result.is_null());
-        otto_free_grammar_result(result);
+        unsafe { otto_free_grammar_result(result) };
     }
 
     #[test]
     fn test_code_reshape() {
         ensure_initialized();
-        otto_set_code_reshape_enabled(true);
+        unsafe { otto_set_code_reshape_enabled(true) };
 
         let code = CString::new("if x == true { return true; }").unwrap();
         let operation = CString::new("refactor").unwrap();
-        let result = otto_reshape_code(code.as_ptr(), operation.as_ptr());
+        let result = unsafe { otto_reshape_code(code.as_ptr(), operation.as_ptr()) };
 
         assert!(!result.is_null());
-        otto_free_code_reshape_result(result);
+        unsafe { otto_free_code_reshape_result(result) };
     }
 
     #[test]
     fn test_model_switching() {
         ensure_initialized();
 
-        otto_set_model(CString::new("zeta-2").unwrap().as_ptr());
+        unsafe { otto_set_model(CString::new("zeta-2").unwrap().as_ptr()) };
         let model = unsafe { CStr::from_ptr(otto_get_current_model()) };
         assert_eq!(model.to_str().unwrap(), "zeta-2");
 
-        otto_set_model(CString::new("qwen-3.5").unwrap().as_ptr());
+        unsafe { otto_set_model(CString::new("qwen-3.5").unwrap().as_ptr()) };
         let model = unsafe { CStr::from_ptr(otto_get_current_model()) };
         assert_eq!(model.to_str().unwrap(), "qwen-3.5");
 
-        otto_set_model(CString::new("gemma-4").unwrap().as_ptr());
+        unsafe { otto_set_model(CString::new("gemma-4").unwrap().as_ptr()) };
         let model = unsafe { CStr::from_ptr(otto_get_current_model()) };
         assert_eq!(model.to_str().unwrap(), "gemma-4");
     }
