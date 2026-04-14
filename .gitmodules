@@ -1,0 +1,3 @@
+[submodule "deps/eqswift"]
+	path = deps/eqswift
+	url = https://github.com/semitechnological/eqswift.git
