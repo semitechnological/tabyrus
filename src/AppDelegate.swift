@@ -57,15 +57,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ClipboardMonitorDelegate, Sc
     }
 
     func setupStatusBar() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem?.button?.title = "Otto"
+        if let button = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength).button {
+            button.title = "Otto"
+            button.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        }
 
         let menu = NSMenu()
         
-        let aboutItem = NSMenuItem(title: "About Otto", action: #selector(showAbout), keyEquivalent: "")
-        aboutItem.tag = 100
-        menu.addItem(aboutItem)
-        
+        // Status header
+        let headerItem = NSMenuItem(title: "Otto Autocomplete", action: nil, keyEquivalent: "")
+        headerItem.isEnabled = false
+        menu.addItem(headerItem)
         menu.addItem(NSMenuItem.separator())
         
         let monitoringItem = NSMenuItem(title: "Monitoring: On", action: #selector(toggleMonitoring), keyEquivalent: "")
@@ -73,24 +75,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ClipboardMonitorDelegate, Sc
         statusMenuItems[1] = monitoringItem
         menu.addItem(monitoringItem)
         
-        let clipboardItem = NSMenuItem(title: "Clipboard: On", action: #selector(toggleClipboard), keyEquivalent: "")
-        clipboardItem.tag = 2
-        statusMenuItems[2] = clipboardItem
-        menu.addItem(clipboardItem)
-        
-        let screenshotItem = NSMenuItem(title: "Screenshots: Off", action: #selector(toggleScreenshots), keyEquivalent: "")
-        screenshotItem.tag = 3
-        statusMenuItems[3] = screenshotItem
-        menu.addItem(screenshotItem)
-        
         menu.addItem(NSMenuItem.separator())
         
         let modelSubmenu = NSMenu()
         let modelItem = NSMenuItem(title: "AI Model", action: nil, keyEquivalent: "")
         modelItem.tag = 10
+        
         for model in OttoModel.allCases {
+            let isDownloaded = OttoBackend.shared.isModelDownloaded(model.modelIdentifier)
+            let title = isDownloaded ? "✓ \(model.displayName)" : "○ \(model.displayName) (Not Downloaded)"
             let item = NSMenuItem(
-                title: model.displayName,
+                title: title,
                 action: #selector(selectModel(_:)),
                 keyEquivalent: ""
             )
@@ -98,6 +93,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ClipboardMonitorDelegate, Sc
             item.state = model == settingsManager.currentSettings.selectedModel ? .on : .off
             modelSubmenu.addItem(item)
         }
+        
+        // Add download all option
+        modelSubmenu.addItem(NSMenuItem.separator())
+        let downloadItem = NSMenuItem(title: "Download All Models...", action: #selector(downloadAllModels), keyEquivalent: "")
+        downloadItem.tag = 15
+        modelSubmenu.addItem(downloadItem)
+        
         modelItem.submenu = modelSubmenu
         menu.addItem(modelItem)
         
@@ -255,6 +257,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, ClipboardMonitorDelegate, Sc
         }
         
         print("Model switched to: \(model.displayName)")
+    }
+    
+    @objc func downloadAllModels() {
+        for model in OttoModel.allCases {
+            if !OttoBackend.shared.isModelDownloaded(model.modelIdentifier) {
+                OttoBackend.shared.downloadModel(model.modelIdentifier) { result in
+                    DispatchQueue.main.async {
+                        if case .failure(let error) = result {
+                            print("Download failed: \(error)")
+                        } else {
+                            print("Downloaded \(model.displayName)")
+                        }
+                        self.rebuildMenu()
+                    }
+                }
+            }
+        }
     }
     
     @objc func toggleCodeReshape() {

@@ -86,7 +86,7 @@ struct OttoSettings: Codable {
     
     static var `default`: OttoSettings {
         OttoSettings(
-            selectedModel: .zeta2,
+            selectedModel: .qwen35,
             codeReshapeEnabled: false,
             grammarCheckEnabled: false,
             codeReshapeBehavior: .onDemand,
