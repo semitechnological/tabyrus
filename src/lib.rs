@@ -488,20 +488,8 @@ pub unsafe extern "C" fn otto_get_model_cache_path(model_name: *const c_char) ->
 
 #[no_mangle]
 pub unsafe extern "C" fn otto_initialize_completions() {
-    let mut completions = HashMap::new();
-
-    completions.insert("the", vec!["the", "then", "there", "these", "they"]);
-    completions.insert("an", vec!["and", "any", "are", "as", "at"]);
-    completions.insert("fo", vec!["for", "from", "of", "on", "out"]);
-    completions.insert("ar", vec!["are", "and", "art", "as", "at"]);
-    completions.insert("bu", vec!["but", "by", "be", "bus", "but"]);
-    completions.insert("no", vec!["not", "now", "no", "nor", "new"]);
-    completions.insert("yo", vec!["you", "your", "yours", "young"]);
-    completions.insert("al", vec!["all", "also", "and", "as", "at"]);
-    completions.insert("ca", vec!["can", "cat", "car", "case", "call"]);
-    completions.insert("he", vec!["her", "he", "here", "help", "his"]);
-
-    COMPLETIONS.set(completions).unwrap();
+    // Only ML completions - dictionary is disabled
+    // Models must be downloaded for completions to work
 
     CODE_RESHAPE_ENABLED.get_or_init(|| std::sync::atomic::AtomicBool::new(false));
     GRAMMAR_ENABLED.get_or_init(|| std::sync::atomic::AtomicBool::new(false));
@@ -752,7 +740,7 @@ pub unsafe extern "C" fn otto_set_model(model_name: *const c_char) {
         Err(_) => return,
     };
 
-    let model_lock = CURRENT_MODEL.get_or_init(|| Mutex::new(CompletionModel::Zeta2));
+    let model_lock = CURRENT_MODEL.get_or_init(|| Mutex::new(CompletionModel::Qwen35));
 
     let new_model = match model {
         "zeta-2" | "zeta" | "NexVeridian/zeta-2-4bit" => {
@@ -768,8 +756,8 @@ pub unsafe extern "C" fn otto_set_model(model_name: *const c_char) {
             CompletionModel::Gemma4
         }
         _ => {
-            println!("Unknown model {}, defaulting to zeta-2", model);
-            CompletionModel::Zeta2
+            println!("Unknown model {}, defaulting to qwen-3.5", model);
+            CompletionModel::Qwen35
         }
     };
 
