@@ -1,0 +1,6 @@
+namespace test;
+
+interface Test {
+  constructor new();
+  string hello();
+}
