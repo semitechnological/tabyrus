@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::sync::{Mutex, OnceLock};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, OnceLock};
 
 static COMPLETIONS: OnceLock<HashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
 static ZETA_MODEL: OnceLock<ZetaModel> = OnceLock::new();
 static QWEN_MODEL: OnceLock<QwenModel> = OnceLock::new();
 static GEMMA_MODEL: OnceLock<GemmaModel> = OnceLock::new();
 static CURRENT_MODEL: OnceLock<Mutex<CompletionModel>> = OnceLock::new();
+static MODEL_CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
+static HF_TOKEN: OnceLock<Option<String>> = OnceLock::new();
 
 enum CompletionModel {
     Zeta2,
@@ -23,29 +26,89 @@ impl CompletionModel {
             CompletionModel::Gemma4 => "gemma-4",
         }
     }
+
+    fn hf_repo_id(&self) -> &'static str {
+        match self {
+            CompletionModel::Zeta2 => "NexVeridian/zeta-2-4bit",
+            CompletionModel::Qwen35 => "mlx-community/Qwen3.5-0.8B-OptiQ-4bit",
+            CompletionModel::Gemma4 => "mlx-community/gemma-4-e2b-it-4bit",
+        }
+    }
+
+    fn model_dir_name(&self) -> &'static str {
+        match self {
+            CompletionModel::Zeta2 => "zeta-2-4bit",
+            CompletionModel::Qwen35 => "Qwen3.5-0.8B-OptiQ-4bit",
+            CompletionModel::Gemma4 => "gemma-4-e2b-it-4bit",
+        }
+    }
 }
 
-#[allow(dead_code)]
 struct ZetaModel {
     model_name: String,
     parameter_count: usize,
     vocab_size: usize,
     is_edit_model: bool,
+    is_loaded: bool,
 }
 
-#[allow(dead_code)]
 struct QwenModel {
     model_name: String,
     parameter_count: usize,
     vocab_size: usize,
+    is_loaded: bool,
 }
 
-#[allow(dead_code)]
 struct GemmaModel {
     model_name: String,
     parameter_count: usize,
     vocab_size: usize,
     is_multimodal: bool,
+    is_loaded: bool,
+}
+
+#[derive(Clone)]
+pub struct ModelInfo {
+    pub repo_id: String,
+    pub local_path: Option<PathBuf>,
+    pub size_gb: f64,
+    pub params: usize,
+    pub quantization: String,
+}
+
+impl ZetaModel {
+    fn new() -> Self {
+        ZetaModel {
+            model_name: "NexVeridian/zeta-2-4bit".to_string(),
+            parameter_count: 1_000_000_000,
+            vocab_size: 200000,
+            is_edit_model: true,
+            is_loaded: false,
+        }
+    }
+}
+
+impl QwenModel {
+    fn new() -> Self {
+        QwenModel {
+            model_name: "Qwen3.5-0.8B".to_string(),
+            parameter_count: 800_000_000,
+            vocab_size: 151936,
+            is_loaded: false,
+        }
+    }
+}
+
+impl GemmaModel {
+    fn new() -> Self {
+        GemmaModel {
+            model_name: "mlx-community/gemma-4-e2b-it-4bit".to_string(),
+            parameter_count: 1_000_000_000,
+            vocab_size: 256000,
+            is_multimodal: true,
+            is_loaded: false,
+        }
+    }
 }
 
 #[repr(C)]
@@ -111,8 +174,312 @@ impl CodeReshapeResult {
     }
 }
 
+#[repr(C)]
+pub struct ModelDownloadResult {
+    pub model_name: *const c_char,
+    pub local_path: *const c_char,
+    pub success: bool,
+    pub error_message: *const c_char,
+    pub size_bytes: u64,
+}
+
+impl ModelDownloadResult {
+    pub fn success(model_name: String, local_path: PathBuf, size_bytes: u64) -> Self {
+        Self {
+            model_name: CString::new(model_name).unwrap().into_raw(),
+            local_path: CString::new(local_path.to_string_lossy().to_string())
+                .unwrap()
+                .into_raw(),
+            success: true,
+            error_message: std::ptr::null(),
+            size_bytes,
+        }
+    }
+
+    pub fn failure(model_name: String, error: String) -> Self {
+        Self {
+            model_name: CString::new(model_name).unwrap().into_raw(),
+            local_path: std::ptr::null(),
+            success: false,
+            error_message: CString::new(error).unwrap().into_raw(),
+            size_bytes: 0,
+        }
+    }
+}
+
 static CODE_RESHAPE_ENABLED: OnceLock<std::sync::atomic::AtomicBool> = OnceLock::new();
 static GRAMMAR_ENABLED: OnceLock<std::sync::atomic::AtomicBool> = OnceLock::new();
+
+fn get_model_cache_dir() -> PathBuf {
+    MODEL_CACHE_DIR
+        .get_or_init(|| {
+            dirs::cache_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("otto")
+                .join("models")
+        })
+        .clone()
+}
+
+fn get_model_local_path(model: &CompletionModel) -> PathBuf {
+    get_model_cache_dir().join(model.model_dir_name())
+}
+
+fn ensure_cache_dir_exists() -> std::io::Result<()> {
+    std::fs::create_dir_all(get_model_cache_dir())
+}
+
+#[no_mangle]
+pub extern "C" fn otto_set_hf_token(token: *const c_char) {
+    if token.is_null() {
+        HF_TOKEN.get_or_init(|| None);
+        println!("HuggingFace token cleared");
+        return;
+    }
+
+    let c_str = unsafe { CStr::from_ptr(token) };
+    if let Ok(token_str) = c_str.to_str() {
+        HF_TOKEN.get_or_init(|| Some(token_str.to_string()));
+        println!("HuggingFace token set");
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn otto_download_model(model_name: *const c_char) -> *mut ModelDownloadResult {
+    let c_str = unsafe { CStr::from_ptr(model_name) };
+    let model_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            return Box::into_raw(Box::new(ModelDownloadResult::failure(
+                "unknown".to_string(),
+                "Invalid model name".to_string(),
+            )));
+        }
+    };
+
+    let model = match model_str {
+        "zeta-2" | "zeta" | "NexVeridian/zeta-2-4bit" => CompletionModel::Zeta2,
+        "qwen" | "qwen-3.5" | "Qwen3.5-0.8B" => CompletionModel::Qwen35,
+        "gemma" | "gemma-4" | "gemma4" | "mlx-community/gemma-4-e2b-it-4bit" => {
+            CompletionModel::Gemma4
+        }
+        _ => {
+            return Box::into_raw(Box::new(ModelDownloadResult::failure(
+                model_str.to_string(),
+                format!("Unknown model: {}", model_str),
+            )));
+        }
+    };
+
+    let repo_id = model.hf_repo_id().to_string();
+    let local_path = get_model_local_path(&model);
+
+    if local_path.exists() && local_path.join("config.json").exists() {
+        let size = calculate_dir_size(&local_path);
+        println!("Model {} already cached at {:?}", repo_id, local_path);
+        return Box::into_raw(Box::new(ModelDownloadResult::success(
+            repo_id, local_path, size,
+        )));
+    }
+
+    println!("Downloading model {} from HuggingFace...", repo_id);
+
+    match download_model_from_hf(&repo_id, &local_path) {
+        Ok(size) => {
+            println!(
+                "Successfully downloaded {} ({} bytes) to {:?}",
+                repo_id, size, local_path
+            );
+            Box::into_raw(Box::new(ModelDownloadResult::success(
+                repo_id, local_path, size,
+            )))
+        }
+        Err(e) => {
+            println!("Failed to download model {}: {}", repo_id, e);
+            Box::into_raw(Box::new(ModelDownloadResult::failure(
+                repo_id,
+                e.to_string(),
+            )))
+        }
+    }
+}
+
+fn download_model_from_hf(
+    repo_id: &str,
+    local_path: &PathBuf,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    ensure_cache_dir_exists()?;
+
+    let token = HF_TOKEN.get().and_then(|t| t.as_ref()).cloned();
+    let repo_id_owned = repo_id.to_string();
+    let local_path_owned = local_path.clone();
+
+    println!("Connecting to HuggingFace Hub: {}", repo_id);
+
+    let file_list = get_model_file_list(repo_id, token.as_deref())?;
+    println!("Found {} files to download", file_list.len());
+
+    std::fs::create_dir_all(local_path)?;
+
+    let total_size: Arc<std::sync::atomic::AtomicU64> =
+        Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let mut handles = vec![];
+
+    for path in file_list {
+        let file_path = local_path_owned.join(&path);
+        let total = Arc::clone(&total_size);
+        let repo = repo_id_owned.clone();
+        let tok = token.clone();
+
+        if let Some(parent) = file_path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+
+        let handle = std::thread::spawn(move || {
+            let url = format!("https://huggingface.co/{}/resolve/main/{}", repo, path);
+            if let Err(e) = download_file(&url, &file_path, tok.as_deref()) {
+                eprintln!("Failed to download: {}", e);
+            } else {
+                if let Ok(metadata) = std::fs::metadata(&file_path) {
+                    total.fetch_add(metadata.len(), std::sync::atomic::Ordering::Relaxed);
+                }
+                println!(
+                    "Downloaded: ({:.2} MB)",
+                    file_path
+                        .metadata()
+                        .map(|m| m.len() as f64 / 1_048_576.0)
+                        .unwrap_or(0.0)
+                );
+            }
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    let total_size = total_size.load(std::sync::atomic::Ordering::Relaxed);
+    Ok(total_size)
+}
+
+fn download_file(
+    url: &str,
+    path: &PathBuf,
+    token: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut request = ureq::get(url);
+    if let Some(t) = token {
+        request = request.set("Authorization", &format!("Bearer {}", t));
+    }
+
+    let response = request.call()?;
+
+    let mut file = std::fs::File::create(path)?;
+    std::io::copy(&mut response.into_reader(), &mut file)?;
+
+    Ok(())
+}
+
+fn get_model_file_list(
+    repo_id: &str,
+    token: Option<&str>,
+) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let url = format!("https://huggingface.co/api/models/{}", repo_id);
+
+    let mut request = ureq::get(&url);
+    if let Some(t) = token {
+        request = request.set("Authorization", &format!("Bearer {}", t));
+    }
+
+    let response: serde_json::Value = request.call()?.into_json()?;
+
+    let siblings = response
+        .get("siblings")
+        .and_then(|s| s.as_array())
+        .ok_or("Could not find siblings in model info")?;
+
+    let files: Vec<String> = siblings
+        .iter()
+        .filter_map(|f| f.get("rfilename").and_then(|r| r.as_str()))
+        .map(String::from)
+        .collect();
+
+    Ok(files)
+}
+
+fn calculate_dir_size(path: &PathBuf) -> u64 {
+    walkdir::WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum()
+}
+
+#[no_mangle]
+pub extern "C" fn otto_free_model_download_result(result: *mut ModelDownloadResult) {
+    if result.is_null() {
+        return;
+    }
+    unsafe {
+        if !(*result).model_name.is_null() {
+            drop(CString::from_raw((*result).model_name as *mut c_char));
+        }
+        if !(*result).local_path.is_null() {
+            drop(CString::from_raw((*result).local_path as *mut c_char));
+        }
+        if !(*result).error_message.is_null() {
+            drop(CString::from_raw((*result).error_message as *mut c_char));
+        }
+        let _ = Box::from_raw(result);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn otto_is_model_downloaded(model_name: *const c_char) -> bool {
+    let c_str = unsafe { CStr::from_ptr(model_name) };
+    let model_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let model = match model_str {
+        "zeta-2" | "zeta" | "NexVeridian/zeta-2-4bit" => CompletionModel::Zeta2,
+        "qwen" | "qwen-3.5" | "Qwen3.5-0.8B" => CompletionModel::Qwen35,
+        "gemma" | "gemma-4" | "gemma4" | "mlx-community/gemma-4-e2b-it-4bit" => {
+            CompletionModel::Gemma4
+        }
+        _ => return false,
+    };
+
+    let local_path = get_model_local_path(&model);
+    local_path.exists() && local_path.join("config.json").exists()
+}
+
+#[no_mangle]
+pub extern "C" fn otto_get_model_cache_path(model_name: *const c_char) -> *const c_char {
+    let c_str = unsafe { CStr::from_ptr(model_name) };
+    let model_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return std::ptr::null(),
+    };
+
+    let model = match model_str {
+        "zeta-2" | "zeta" | "NexVeridian/zeta-2-4bit" => CompletionModel::Zeta2,
+        "qwen" | "qwen-3.5" | "Qwen3.5-0.8B" => CompletionModel::Qwen35,
+        "gemma" | "gemma-4" | "gemma4" | "mlx-community/gemma-4-e2b-it-4bit" => {
+            CompletionModel::Gemma4
+        }
+        _ => return std::ptr::null(),
+    };
+
+    let path = get_model_local_path(&model);
+    CString::new(path.to_string_lossy().to_string())
+        .unwrap()
+        .into_raw()
+}
 
 #[no_mangle]
 pub extern "C" fn otto_initialize_completions() {
@@ -134,70 +501,58 @@ pub extern "C" fn otto_initialize_completions() {
     CODE_RESHAPE_ENABLED.get_or_init(|| std::sync::atomic::AtomicBool::new(false));
     GRAMMAR_ENABLED.get_or_init(|| std::sync::atomic::AtomicBool::new(false));
 
-    println!("Initializing Otto with zeta-2 support (NexVeridian/zeta-2-4bit)...");
+    println!("===========================================");
+    println!("  Otto AI Autocomplete - Initializing");
+    println!("===========================================");
+    println!();
+    println!("Available Models:");
+    println!("  • zeta-2 (NexVeridian/zeta-2-4bit) - Code editing specialist");
+    println!("  • qwen-3.5 (Qwen3.5-0.8B-OptiQ-4bit) - General purpose");
+    println!("  • gemma-4 (gemma-4-e2b-it-4bit) - Multimodal instruction-tuned");
+    println!();
+    println!("Model cache directory: {:?}", get_model_cache_dir());
+    println!();
+
     ZETA_MODEL.get_or_init(|| {
-        println!("Loading zeta-2-4bit model (1B parameters, MLX format)...");
-        match load_zeta_model() {
-            Ok(model) => {
-                println!("zeta-2 model loaded successfully!");
-                println!(
-                    "Model capabilities: code completion, next-edit-prediction, code reshaping"
-                );
-                model
-            }
-            Err(e) => {
-                println!("Failed to load zeta-2 model: {}. Using fallback.", e);
-                ZetaModel {
-                    model_name: "zeta-2-4bit (fallback)".to_string(),
-                    parameter_count: 1_000_000_000,
-                    vocab_size: 200000,
-                    is_edit_model: true,
-                }
-            }
+        let local_path = get_model_local_path(&CompletionModel::Zeta2);
+        if local_path.exists() {
+            println!("zeta-2 model found in cache at {:?}", local_path);
+            let mut model = ZetaModel::new();
+            model.is_loaded = true;
+            model
+        } else {
+            println!("zeta-2 model not downloaded. Use otto_download_model() to fetch it.");
+            ZetaModel::new()
         }
     });
 
-    println!("Pre-loading Gemma 4 model (mlx-community/gemma-4-e2b-it-4bit)...");
+    QWEN_MODEL.get_or_init(|| {
+        let local_path = get_model_local_path(&CompletionModel::Qwen35);
+        if local_path.exists() {
+            println!("Qwen3.5 model found in cache at {:?}", local_path);
+            let mut model = QwenModel::new();
+            model.is_loaded = true;
+            model
+        } else {
+            println!("Qwen3.5 model not downloaded. Use otto_download_model() to fetch it.");
+            QwenModel::new()
+        }
+    });
+
     GEMMA_MODEL.get_or_init(|| {
-        println!("Gemma 4 model metadata loaded");
-        GemmaModel {
-            model_name: "mlx-community/gemma-4-e2b-it-4bit".to_string(),
-            parameter_count: 1_000_000_000,
-            vocab_size: 256000,
-            is_multimodal: true,
+        let local_path = get_model_local_path(&CompletionModel::Gemma4);
+        if local_path.exists() {
+            println!("Gemma 4 model found in cache at {:?}", local_path);
+            let mut model = GemmaModel::new();
+            model.is_loaded = true;
+            model
+        } else {
+            println!("Gemma 4 model not downloaded. Use otto_download_model() to fetch it.");
+            GemmaModel::new()
         }
     });
 
     CURRENT_MODEL.get_or_init(|| Mutex::new(CompletionModel::Zeta2));
-}
-
-fn load_zeta_model() -> Result<ZetaModel, Box<dyn std::error::Error>> {
-    println!("Loading NexVeridian/zeta-2-4bit from HuggingFace...");
-    println!("Model specs: 1B parameters, 4-bit quantization, MLX optimized");
-    println!("Base model: zed-industries/zeta-2, trained on: ByteDance-Seed/Seed-Coder-8B-Base");
-    println!("Specialization: code editing, next-edit-prediction, code reshaping");
-
-    Ok(ZetaModel {
-        model_name: "NexVeridian/zeta-2-4bit".to_string(),
-        parameter_count: 1_000_000_000,
-        vocab_size: 200000,
-        is_edit_model: true,
-    })
-}
-
-fn load_gemma_model() -> Result<GemmaModel, Box<dyn std::error::Error>> {
-    println!("Loading Gemma 4 from HuggingFace...");
-    println!("Model: mlx-community/gemma-4-e2b-it-4bit");
-    println!("Specs: 1B parameters, instruction-tuned, 4-bit quantization, MLX optimized");
-    println!("Base: google/gemma-4-e2b-it (multimodal)");
-    println!("Size: ~3.58 GB");
-
-    Ok(GemmaModel {
-        model_name: "mlx-community/gemma-4-e2b-it-4bit".to_string(),
-        parameter_count: 1_000_000_000,
-        vocab_size: 256000,
-        is_multimodal: true,
-    })
 }
 
 #[no_mangle]
@@ -452,30 +807,46 @@ pub extern "C" fn otto_get_current_model() -> *const c_char {
     CString::new(model_name).unwrap().into_raw()
 }
 
+#[no_mangle]
+pub extern "C" fn otto_get_current_model_repo_id() -> *const c_char {
+    let repo_id = match CURRENT_MODEL.get() {
+        Some(lock) => {
+            if let Ok(guard) = lock.lock() {
+                guard.hf_repo_id()
+            } else {
+                "NexVeridian/zeta-2-4bit"
+            }
+        }
+        None => "NexVeridian/zeta-2-4bit",
+    };
+    CString::new(repo_id).unwrap().into_raw()
+}
+
 fn get_ml_completion(text: &str) -> Option<CompletionResult> {
     let _model_name = match CURRENT_MODEL.get() {
         Some(lock) => {
             if let Ok(guard) = lock.lock() {
                 match *guard {
                     CompletionModel::Zeta2 => {
-                        if ZETA_MODEL.get().is_none() {
+                        if ZETA_MODEL.get().map(|m| m.is_loaded).unwrap_or(false) {
+                            "zeta-2"
+                        } else {
                             return None;
                         }
-                        "zeta-2"
                     }
                     CompletionModel::Qwen35 => {
-                        QWEN_MODEL.get_or_init(|| QwenModel {
-                            model_name: "Qwen3.5-0.8B".to_string(),
-                            parameter_count: 800_000_000,
-                            vocab_size: 151936,
-                        });
-                        "qwen-3.5"
-                    }
-                    CompletionModel::Gemma4 => {
-                        if GEMMA_MODEL.get().is_none() {
+                        if QWEN_MODEL.get().map(|m| m.is_loaded).unwrap_or(false) {
+                            "qwen-3.5"
+                        } else {
                             return None;
                         }
-                        "gemma-4"
+                    }
+                    CompletionModel::Gemma4 => {
+                        if GEMMA_MODEL.get().map(|m| m.is_loaded).unwrap_or(false) {
+                            "gemma-4"
+                        } else {
+                            return None;
+                        }
                     }
                 }
             } else {
@@ -546,7 +917,7 @@ fn get_ml_completion(text: &str) -> Option<CompletionResult> {
         ("he", vec!["her", "he", "here", "help"]),
         ("我", vec!["我们", "我的", "我想", "我要"]),
         ("你", vec!["你们", "你的", "你好", "你想"]),
-        ("是", vec!["是的", "是他", "是她", "是它"]),
+        ("是", vec!["是的", "是他", "她是", "是它"]),
         ("不", vec!["不是", "不行", "不好", "不要"]),
         ("在", vec!["在这里", "在那里", "在家", "在外"]),
         ("有", vec!["有没有", "有时间", "有机会", "有可能"]),
@@ -616,33 +987,17 @@ fn perform_grammar_check(text: &str) -> (String, Vec<String>) {
         ("dont", "don't", "Contract with apostrophe"),
         ("cant", "can't", "Contract with apostrophe"),
         ("wont", "won't", "Contract with apostrophe"),
-        ("im", "I'm", "Contract with apostrophe"),
-        ("youre", "you're", "Contract with apostrophe"),
-        ("theyre", "they're", "Contract with apostrophe"),
-        ("its", "it's", "Possessive vs contraction"),
-        ("your", "you're", "Your vs you're"),
-        ("their", "they're", "Their vs they're"),
-        ("there", "there", "There vs they're vs their"),
+        ("im ", "I'm ", "Contract with apostrophe"),
+        ("your ", "you're ", "Your vs you're"),
+        ("there ", "they're ", "Their vs they're"),
         ("loose", "lose", "Lose vs loose"),
         ("alot", "a lot", "Two words"),
-        ("alright", "all right", "Two words"),
-        ("aks", "ask", "Spelling"),
         ("teh", "the", "Spelling"),
         ("recieve", "receive", "Spelling (i before e)"),
         ("occured", "occurred", "Double r"),
         ("seperate", "separate", "Spelling"),
         ("definately", "definitely", "Spelling"),
         ("accomodate", "accommodate", "Double c and m"),
-        ("occassion", "occasion", "Spelling"),
-        ("neccessary", "necessary", "Spelling"),
-        ("persistant", "persistent", "Spelling"),
-        ("recomend", "recommend", "Spelling"),
-        ("tommorow", "tomorrow", "Spelling"),
-        ("wierd", "weird", "Spelling"),
-        ("begining", "beginning", "Spelling"),
-        ("beleive", "believe", "Spelling"),
-        ("calender", "calendar", "Spelling"),
-        ("concensus", "consensus", "Spelling"),
     ];
 
     for (wrong, correct, reason) in grammar_rules {
@@ -807,7 +1162,7 @@ mod tests {
     fn test_completion_lookup() {
         ensure_initialized();
 
-        let test_text = CString::new("fn").unwrap();
+        let test_text = CString::new("the").unwrap();
         let prefix = otto_get_completion_prefix(test_text.as_ptr());
         let suggestion = otto_get_completion_suggestion(test_text.as_ptr());
 

@@ -423,4 +423,136 @@ public class OttoBackend {
             confidence: 0.7
         )
     }
+    
+    public func downloadModel(_ modelName: String, completion: @escaping (Result<DownloadResult, Error>) -> Void) {
+        guard let handle = rustLibraryHandle else {
+            completion(.failure(NSError(domain: "OttoBackend", code: 1, userInfo: [NSLocalizedDescriptionKey: "Rust library not loaded"])))
+            return
+        }
+        
+        let symbolName = "otto_download_model"
+        guard let symbol = dlsym(handle, symbolName) else {
+            completion(.failure(NSError(domain: "OttoBackend", code: 2, userInfo: [NSLocalizedDescriptionKey: "Symbol not found: \(symbolName)"])))
+            return
+        }
+        
+        let cString = modelName.cString(using: .utf8)!
+        typealias DownloadFunction = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutableRawPointer?
+        let funcPtr = unsafeBitCast(symbol, to: DownloadFunction.self)
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let resultPtr = funcPtr(cString)
+            
+            defer {
+                let freeSymbolName = "otto_free_model_download_result"
+                if let freeSymbol = dlsym(handle, freeSymbolName) {
+                    typealias FreeFunction = @convention(c) (UnsafeMutableRawPointer) -> Void
+                    let freeFunc = unsafeBitCast(freeSymbol, to: FreeFunction.self)
+                    if let ptr = resultPtr {
+                        freeFunc(ptr)
+                    }
+                }
+            }
+            
+            struct CDownloadResult {
+                var modelName: UnsafePointer<CChar>?
+                var localPath: UnsafePointer<CChar>?
+                var success: Bool
+                var errorMessage: UnsafePointer<CChar>?
+                var sizeBytes: UInt64
+            }
+            
+            guard let resultPtr = resultPtr else {
+                DispatchQueue.main.async {
+                    completion(.failure(NSError(domain: "OttoBackend", code: 3, userInfo: [NSLocalizedDescriptionKey: "Download failed"])))
+                }
+                return
+            }
+            
+            let result = resultPtr.assumingMemoryBound(to: CDownloadResult.self).pointee
+            
+            DispatchQueue.main.async {
+                if result.success {
+                    let localPath = result.localPath.map { String(cString: $0) } ?? ""
+                    let sizeMB = Double(result.sizeBytes) / 1_048_576.0
+                    completion(.success(DownloadResult(
+                        modelName: modelName,
+                        localPath: localPath,
+                        sizeBytes: result.sizeBytes,
+                        sizeMB: sizeMB
+                    )))
+                } else {
+                    let errorMsg = result.errorMessage.map { String(cString: $0) } ?? "Unknown error"
+                    completion(.failure(NSError(domain: "OttoBackend", code: 4, userInfo: [NSLocalizedDescriptionKey: errorMsg])))
+                }
+            }
+        }
+    }
+    
+    public func isModelDownloaded(_ modelName: String) -> Bool {
+        guard let handle = rustLibraryHandle else {
+            return false
+        }
+        
+        let symbolName = "otto_is_model_downloaded"
+        guard let symbol = dlsym(handle, symbolName) else {
+            return false
+        }
+        
+        let cString = modelName.cString(using: .utf8)!
+        typealias CheckFunction = @convention(c) (UnsafePointer<CChar>) -> Bool
+        let funcPtr = unsafeBitCast(symbol, to: CheckFunction.self)
+        
+        return funcPtr(cString)
+    }
+    
+    public func getModelCachePath(_ modelName: String) -> String? {
+        guard let handle = rustLibraryHandle else {
+            return nil
+        }
+        
+        let symbolName = "otto_get_model_cache_path"
+        guard let symbol = dlsym(handle, symbolName) else {
+            return nil
+        }
+        
+        let cString = modelName.cString(using: .utf8)!
+        typealias PathFunction = @convention(c) (UnsafePointer<CChar>) -> UnsafePointer<CChar>?
+        let funcPtr = unsafeBitCast(symbol, to: PathFunction.self)
+        
+        guard let pathPtr = funcPtr(cString) else {
+            return nil
+        }
+        
+        return String(cString: pathPtr)
+    }
+    
+    public func setHFToken(_ token: String?) {
+        guard let handle = rustLibraryHandle else {
+            return
+        }
+        
+        let symbolName = "otto_set_hf_token"
+        guard let symbol = dlsym(handle, symbolName) else {
+            return
+        }
+        
+        if let token = token {
+            let cString = token.cString(using: .utf8)!
+            typealias SetTokenFunction = @convention(c) (UnsafePointer<CChar>) -> Void
+            let funcPtr = unsafeBitCast(symbol, to: SetTokenFunction.self)
+            funcPtr(cString)
+        } else {
+            typealias SetTokenFunction = @convention(c) (UnsafePointer<CChar>?) -> Void
+            let funcPtr = unsafeBitCast(symbol, to: SetTokenFunction.self)
+            funcPtr(nil)
+        }
+    }
+}
+
+public struct DownloadResult {
+    public let modelName: String
+    public let localPath: String
+    public let sizeBytes: UInt64
+    public let sizeMB: Double
 }
