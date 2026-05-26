@@ -1,6 +1,5 @@
 import Combine
 
-@MainActor
 final class SettingsCoordinator: ObservableObject {
     private let settings: TabyrusSettingsManager
     private let modelManager: ModelManager

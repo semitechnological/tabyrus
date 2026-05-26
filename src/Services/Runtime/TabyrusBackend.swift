@@ -87,8 +87,13 @@ public final class TabyrusBackend: @unchecked Sendable {
     }
 
     private func sym<T>(_ name: String) -> T? {
-        guard let h = handle, let s = dlsym(h, name) else { return nil }
-        return unsafeBitCast(s, to: T.self)
+        if let h = handle, let s = dlsym(h, name) {
+            return unsafeBitCast(s, to: T.self)
+        }
+        if let s = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) {
+            return unsafeBitCast(s, to: T.self)
+        }
+        return nil
     }
 
     private func callVoid(_ name: String) {
@@ -167,7 +172,7 @@ public final class TabyrusBackend: @unchecked Sendable {
 
     public func downloadModel(_ name: String, completion: @escaping (Result<DownloadResult, Error>) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self, self.handle != nil else {
+            guard let self else {
                 completion(.failure(NSError(domain: "Tabyrus", code: 1, userInfo: [NSLocalizedDescriptionKey: "Library not loaded"])))
                 return
             }

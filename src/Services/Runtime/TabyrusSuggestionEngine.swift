@@ -5,7 +5,6 @@ enum SuggestionEngine {
     case mlBased
 }
 
-@MainActor
 final class TabyrusSuggestionEngine {
     private let backend: TabyrusBackend
 

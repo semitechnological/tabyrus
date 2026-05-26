@@ -1,7 +1,6 @@
 import Combine
 import Cocoa
 
-@MainActor
 final class SuggestionCoordinator: ObservableObject {
     private let engine: TabyrusSuggestionEngine
     private let focusProvider: FocusTracker

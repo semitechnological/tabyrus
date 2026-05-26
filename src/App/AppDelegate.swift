@@ -1,6 +1,5 @@
 import Cocoa
 
-@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var environment: TabyrusEnvironment?
     private var statusItem: NSStatusItem?

@@ -1,6 +1,5 @@
 import AppKit
 
-@MainActor
 final class InputMonitor {
     var tabPressedHandler: (() -> Bool)?
 

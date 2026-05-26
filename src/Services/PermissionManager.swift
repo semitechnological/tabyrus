@@ -1,7 +1,6 @@
 import AppKit
 import Combine
 
-@MainActor
 final class PermissionManager: ObservableObject {
     @Published var accessibilityGranted = false
     @Published var inputMonitoringGranted = false

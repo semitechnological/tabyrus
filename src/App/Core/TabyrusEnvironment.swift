@@ -1,7 +1,6 @@
 import Foundation
 import Combine
 
-@MainActor
 final class TabyrusEnvironment {
     let backend: TabyrusBackend
     let settingsManager: TabyrusSettingsManager

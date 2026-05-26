@@ -41,7 +41,6 @@ struct FocusedContext {
     let element: AXUIElement
 }
 
-@MainActor
 final class FocusTracker: ObservableObject {
     @Published var snapshot = FocusSnapshot(
         bundleIdentifier: nil, appName: nil, textValue: nil,
