@@ -1,12 +1,11 @@
 //
 //  AIService.swift
-//  Otto
+//  Tabyrus
 //
 //  AI service implementations for completion and instruction generation
 //
 
 import Foundation
-import OttoBackend
 
 // Protocol for AI services
 protocol AIService {
@@ -58,8 +57,8 @@ class DictionaryAIService: AIService {
     }
     
     func generateCompletion(text: String, context: String?) async throws -> String? {
-        // Use existing dictionary logic from OttoBackend
-        let backend = OttoBackend.shared
+        // Use existing dictionary logic from TabyrusBackend
+        let backend = TabyrusBackend.shared
         return backend.getCompletion(for: text)?.suggestion
     }
 }

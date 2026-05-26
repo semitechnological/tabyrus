@@ -1,13 +1,12 @@
 //
 //  CodeReshapeService.swift
-//  Otto
+//  Tabyrus
 //
 //  Service for code reshaping/refactoring suggestions
 //
 
 import Foundation
 import AppKit
-import OttoBackend
 
 protocol CodeReshapeServiceDelegate: AnyObject {
     func codeReshapeService(_ service: CodeReshapeService, didSuggestReshape result: CodeReshapeResult, for code: String)
@@ -16,7 +15,7 @@ protocol CodeReshapeServiceDelegate: AnyObject {
 
 class CodeReshapeService {
     weak var delegate: CodeReshapeServiceDelegate?
-    private let backend: OttoBackend
+    private let backend: TabyrusBackend
     private var isProcessing = false
     
     enum ReshapeOperation: String, CaseIterable {
@@ -53,7 +52,7 @@ class CodeReshapeService {
         }
     }
     
-    init(backend: OttoBackend = .shared) {
+    init(backend: TabyrusBackend = .shared) {
         self.backend = backend
     }
     

@@ -1,6 +1,6 @@
 //
 //  HardwareDetector.swift
-//  Otto
+//  Tabyrus
 //
 //  Detects hardware capabilities for adaptive model selection
 //

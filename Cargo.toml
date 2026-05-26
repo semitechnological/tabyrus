@@ -1,17 +1,17 @@
 [package]
-name = "otto-backend"
-version = "0.1.0"
+name = "tabyrus-backend"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
-name = "otto_backend"
+name = "tabyrus_backend"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 regex = "1.10"
-
+num_cpus = "1.17"
 hf-hub = { version = "0.5", features = ["tokio"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 futures = "0.3"
@@ -21,11 +21,8 @@ ureq = { version = "2.9", features = ["json"] }
 walkdir = "2.4"
 
 [features]
-default = []
-mlx = ["dep:mlx-rs"]
-
-[target.'cfg(target_os = "macos")'.dependencies]
-mlx-rs = { version = "0.25", optional = true, features = ["metal"] }
+default = ["mlx"]
+mlx = []
 
 [profile.release]
 opt-level = 3

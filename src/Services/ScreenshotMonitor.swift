@@ -1,6 +1,6 @@
 //
 //  ScreenshotMonitor.swift
-//  Otto
+//  Tabyrus
 //
 //  Captures screenshots for visual context and AI processing
 //

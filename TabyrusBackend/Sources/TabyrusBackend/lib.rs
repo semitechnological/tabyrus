@@ -23,11 +23,11 @@ pub struct CompletionResponse {
     pub is_ml_based: bool,
 }
 
-pub struct OttoBackend {
+pub struct TabyrusBackend {
     completions: Mutex<HashMap<String, Vec<String>>>,
 }
 
-impl OttoBackend {
+impl TabyrusBackend {
     pub fn new() -> Self {
         let mut completions = HashMap::new();
         completions.insert(
@@ -64,13 +64,13 @@ impl OttoBackend {
 }
 
 // Static instance for FFI
-static mut BACKEND: Option<OttoBackend> = None;
+static mut BACKEND: Option<TabyrusBackend> = None;
 
 /// Initialize the backend (call once)
 #[no_mangle]
 pub extern "C" fn otto_init() {
     unsafe {
-        BACKEND = Some(OttoBackend::new());
+        BACKEND = Some(TabyrusBackend::new());
     }
 }
 

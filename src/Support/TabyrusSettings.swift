@@ -1,17 +1,16 @@
 //
-//  OttoSettings.swift
-//  Otto
+//  TabyrusSettings.swift
+//  Tabyrus
 //
 //  Manages user settings and preferences
 //
 
 import Foundation
-import OttoBackend
 
-enum OttoModel: String, Codable, CaseIterable {
-    case zeta2 = "zeta-2"
-    case qwen35 = "qwen-3.5"
+enum TabyrusModel: String, Codable, CaseIterable {
     case gemma4 = "gemma-4"
+    case qwen35 = "qwen-3.5"
+    case zeta2 = "zeta-2"
     
     var displayName: String {
         switch self {
@@ -45,10 +44,18 @@ enum OttoModel: String, Codable, CaseIterable {
             return "mlx-community/gemma-4-e2b-it-4bit"
         }
     }
+
+    var estimatedSizeMB: Double {
+        switch self {
+        case .zeta2: return 800
+        case .qwen35: return 500
+        case .gemma4: return 3600
+        }
+    }
 }
 
-struct OttoSettings: Codable {
-    var selectedModel: OttoModel
+struct TabyrusSettings: Codable {
+    var selectedModel: TabyrusModel
     var codeReshapeEnabled: Bool
     var grammarCheckEnabled: Bool
     var codeReshapeBehavior: CodeReshapeBehavior
@@ -84,9 +91,9 @@ struct OttoSettings: Codable {
         }
     }
     
-    static var `default`: OttoSettings {
-        OttoSettings(
-            selectedModel: .qwen35,
+    static var `default`: TabyrusSettings {
+        TabyrusSettings(
+            selectedModel: .gemma4,
             codeReshapeEnabled: false,
             grammarCheckEnabled: false,
             codeReshapeBehavior: .onDemand,
@@ -97,15 +104,15 @@ struct OttoSettings: Codable {
     }
 }
 
-class OttoSettingsManager {
-    static let shared = OttoSettingsManager()
+class TabyrusSettingsManager {
+    static let shared = TabyrusSettingsManager()
     
-    private let settingsKey = "OttoSettings"
-    private var settings: OttoSettings
+    private let settingsKey = "TabyrusSettings"
+    private var settings: TabyrusSettings
     
     private init() {
         if let data = UserDefaults.standard.data(forKey: settingsKey),
-           let decoded = try? JSONDecoder().decode(OttoSettings.self, from: data) {
+           let decoded = try? JSONDecoder().decode(TabyrusSettings.self, from: data) {
             settings = decoded
         } else {
             settings = .default
@@ -113,7 +120,7 @@ class OttoSettingsManager {
         applySettings()
     }
     
-    var currentSettings: OttoSettings {
+    var currentSettings: TabyrusSettings {
         get { settings }
         set {
             settings = newValue
@@ -122,7 +129,7 @@ class OttoSettingsManager {
         }
     }
     
-    func setModel(_ model: OttoModel) {
+    func setModel(_ model: TabyrusModel) {
         settings.selectedModel = model
         save()
         applySettings()
@@ -140,7 +147,7 @@ class OttoSettingsManager {
         applySettings()
     }
     
-    func setCodeReshapeBehavior(_ behavior: OttoSettings.CodeReshapeBehavior) {
+    func setCodeReshapeBehavior(_ behavior: TabyrusSettings.CodeReshapeBehavior) {
         settings.codeReshapeBehavior = behavior
         save()
         applySettings()
@@ -153,7 +160,7 @@ class OttoSettingsManager {
     }
     
     private func applySettings() {
-        let backend = OttoBackend.shared
+        let backend = TabyrusBackend.shared
         backend.setModel(settings.selectedModel.rawValue)
         backend.setCodeReshapeEnabled(settings.codeReshapeEnabled)
         backend.setGrammarEnabled(settings.grammarCheckEnabled)

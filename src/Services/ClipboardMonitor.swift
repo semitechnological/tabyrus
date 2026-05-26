@@ -1,6 +1,6 @@
 //
 //  ClipboardMonitor.swift
-//  Otto
+//  Tabyrus
 //
 //  Monitors clipboard contents and stores them for AI context
 //

@@ -1,6 +1,6 @@
 //
 //  AppCustomizationManager.swift
-//  Otto
+//  Tabyrus
 //
 //  Manages per-app customizations and AI-generated instructions
 //

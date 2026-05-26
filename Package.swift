@@ -2,20 +2,21 @@
 import PackageDescription
 
 let package = Package(
-    name: "Otto",
+    name: "Tabyrus",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "otto", targets: ["Otto"])
+        .executable(name: "tabyrus", targets: ["Tabyrus"])
     ],
-    dependencies: [
-        .package(path: "./OttoBackend")
-    ],
+    dependencies: [],
     targets: [
         .executableTarget(
-            name: "Otto",
-            dependencies: ["OttoBackend"],
+            name: "Tabyrus",
+            dependencies: [],
             path: "src",
-            resources: []
+            exclude: ["lib.rs"],
+            linkerSettings: [
+                .unsafeFlags(["-Ltarget/debug", "-ltabyrus_backend"])
+            ]
         )
     ]
 )

@@ -1,10 +1,10 @@
-# OttoBackend
+# TabyrusBackend
 
 A Swift package that provides native access to the Rust-based Otto autocomplete backend.
 
 ## Overview
 
-OttoBackend wraps the Rust FFI functions from `otto_backend` into a clean, type-safe Swift interface. It handles:
+TabyrusBackend wraps the Rust FFI functions from `tabyrus_backend` into a clean, type-safe Swift interface. It handles:
 
 - **Library Loading**: Automatically finds and loads the compiled Rust dylib
 - **FFI Bridge**: Safe conversion between Swift and C types
@@ -14,10 +14,10 @@ OttoBackend wraps the Rust FFI functions from `otto_backend` into a clean, type-
 ## Usage
 
 ```swift
-import OttoBackend
+import TabyrusBackend
 
 // Initialize the backend
-let backend = OttoBackend()
+let backend = TabyrusBackend()
 
 // Get completion for text
 if let result = backend.getCompletion(for: "the") {
@@ -35,7 +35,7 @@ if let result = backend.getCompletion(for: "the") {
 - **ML Integration**: Placeholder for MLX model loading and inference
 - **Memory Safety**: All string handling uses proper Rust ownership
 
-### Swift Side (`OttoBackend.swift`)
+### Swift Side (`TabyrusBackend.swift`)
 - **Library Loading**: Uses `dlopen()` to load the Rust dylib
 - **Symbol Resolution**: `dlsym()` to find Rust functions
 - **Type Safety**: Swift structs wrap unsafe C FFI calls
@@ -45,7 +45,7 @@ if let result = backend.getCompletion(for: "the") {
 
 ```swift
 struct ContentView: View {
-    @State private var backend: OttoBackend?
+    @State private var backend: TabyrusBackend?
 
     var body: some View {
         // Your UI here
@@ -59,7 +59,7 @@ struct ContentView: View {
 
     // Initialize in onAppear
     .onAppear {
-        backend = OttoBackend()
+        backend = TabyrusBackend()
     }
 }
 ```
@@ -71,18 +71,18 @@ struct ContentView: View {
 # Build the Rust backend
 cargo build --release
 
-# The library will be at: target/release/libotto_backend.dylib
+# The library will be at: target/release/libtabyrus_backend.dylib
 ```
 
 ### Swift Package
 ```swift
 // Add to Package.swift dependencies
-.package(path: "./OttoBackend")
+.package(path: "./TabyrusBackend")
 
 // Add to target dependencies
 .executableTarget(
     name: "MyApp",
-    dependencies: ["OttoBackend"]
+    dependencies: ["TabyrusBackend"]
 )
 ```
 

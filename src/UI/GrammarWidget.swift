@@ -1,13 +1,12 @@
 //
 //  GrammarWidget.swift
-//  Otto
+//  Tabyrus
 //
 //  Floating widget for grammar checking and sentence rewording
 //
 
 import Cocoa
 import AppKit
-import OttoBackend
 
 protocol GrammarWidgetDelegate: AnyObject {
     func grammarWidget(_ widget: GrammarWidget, didCorrect text: String, suggestions: [String])
@@ -25,9 +24,9 @@ class GrammarWidget: NSWindow {
     private var rewordButton: NSButton!
     
     private var currentResult: GrammarResult?
-    private let backend: OttoBackend
+    private let backend: TabyrusBackend
     
-    init(backend: OttoBackend = .shared) {
+    init(backend: TabyrusBackend = .shared) {
         self.backend = backend
         
         super.init(

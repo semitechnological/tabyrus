@@ -1,0 +1,24 @@
+name: tabyrus
+options:
+  bundleIdPrefix: com.tabyrus
+  deploymentTarget:
+    macOS: "13.0"
+  generateEmptyDirectories: true
+  findCarthageFrameworks: false
+targets:
+  Tabyrus:
+    type: tool
+    platform: macOS
+    sources:
+      - path: src
+        excludes:
+          - "lib.rs"
+    dependencies:
+      - package: TabyrusBackend
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        PRODUCT_BUNDLE_IDENTIFIER: com.tabyrus.app
+packages:
+  TabyrusBackend:
+    path: TabyrusBackend
