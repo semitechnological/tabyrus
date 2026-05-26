@@ -643,9 +643,15 @@ pub unsafe extern "C" fn tabyrus_download_model(model_name: *const c_char) -> *m
 
 #[no_mangle]
 pub unsafe extern "C" fn tabyrus_is_model_downloaded(model_name: *const c_char) -> bool {
-    let model = match from_c_str(model_name).and_then(|s| parse_model(&s)) { Some(m) => m, None => return false };
+    let model = match from_c_str(model_name).and_then(|s| parse_model(&s)) { Some(m) => m, None => {
+        println!("is_downloaded: unknown model");
+        return false;
+    }};
     let p = get_model_local_path(&model);
-    p.exists() && p.join("config.json").exists()
+    let exists = p.exists();
+    let has_config = exists && p.join("config.json").exists();
+    println!("is_downloaded({}): path={:?} exists={} config={}", model.as_str(), p, exists, has_config);
+    has_config
 }
 
 #[no_mangle]

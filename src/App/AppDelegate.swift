@@ -75,7 +75,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         headerItem.isEnabled = false
         menu.addItem(headerItem)
 
-        refreshAll()
         statusMenuItem = NSMenuItem(title: "Status: ...", action: nil, keyEquivalent: "")
         statusMenuItem?.isEnabled = false
         menu.addItem(statusMenuItem!)
@@ -131,10 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildModelMenu(env: TabyrusEnvironment) -> NSMenu {
         let menu = NSMenu()
         for model in TabyrusModel.allCases {
-            let downloaded = env.modelManager.isModelDownloaded(model)
-            let prefix = downloaded ? "✓" : "○"
-            let suffix = downloaded ? "" : " (click to download)"
-            let item = NSMenuItem(title: "\(prefix) \(model.displayName)\(suffix)", action: #selector(selectModel(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: modelTitle(model), action: #selector(selectModel(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = model
             item.state = model == env.settingsManager.currentSettings.selectedModel ? .on : .off
@@ -145,6 +141,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dlItem.target = self
         menu.addItem(dlItem)
         return menu
+    }
+
+    private func modelTitle(_ model: TabyrusModel) -> String {
+        guard let env = environment else { return model.displayName }
+        if env.modelManager.isDownloading && env.modelManager.downloadingModelName == model.displayName {
+            return "\(model.displayName) (downloading...)"
+        }
+        if !env.modelManager.isModelDownloaded(model) {
+            return "\(model.displayName) (click to download)"
+        }
+        return model.displayName
     }
 
     private func refreshAll() {
@@ -166,20 +173,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshModelMenu() {
-        guard let env = environment, let modelMenu = modelMenuRef else { return }
+        guard let modelMenu = modelMenuRef else { return }
         for item in modelMenu.items {
             guard let model = item.representedObject as? TabyrusModel else { continue }
-            let downloaded = env.modelManager.isModelDownloaded(model)
-            let prefix = downloaded ? "✓" : "○"
-            let suffix: String
-            if env.modelManager.isDownloading && env.modelManager.downloadingModelName == model.displayName {
-                suffix = " (downloading...)"
-            } else if downloaded {
-                suffix = ""
-            } else {
-                suffix = " (click to download)"
-            }
-            item.title = "\(prefix) \(model.displayName)\(suffix)"
+            item.title = modelTitle(model)
         }
     }
 

@@ -59,11 +59,16 @@ public final class TabyrusBackend: @unchecked Sendable {
         if let loaded = Self.loadLibrary() {
             handle = loaded.handle
             libPath = loaded.path
-            callVoid("tabyrus_init")
+            print("TabyrusBackend: loaded \(loaded.path)")
         } else {
             handle = nil
             libPath = ""
-            print("TabyrusBackend: Rust library not found — run 'cargo build' first")
+            print("TabyrusBackend: dlopen failed, falling back to RTLD_DEFAULT")
+        }
+        callVoid("tabyrus_init")
+        if handle == nil {
+            let ok = sym("tabyrus_init") != nil
+            print("TabyrusBackend: init via RTLD_DEFAULT: \(ok ? "OK" : "FAIL")")
         }
     }
 
@@ -76,6 +81,19 @@ public final class TabyrusBackend: @unchecked Sendable {
                 if FileManager.default.fileExists(atPath: path),
                    let h = dlopen(path, RTLD_LAZY) {
                     return (h, path)
+                }
+            }
+        }
+        if let execPath = Bundle.main.executablePath {
+            let execDir = (execPath as NSString).deletingLastPathComponent
+            let parent = (execDir as NSString).deletingLastPathComponent
+            for tryDir in [execDir, parent, (parent as NSString).deletingLastPathComponent] {
+                for name in names {
+                    let path = "\(tryDir)/\(name)"
+                    if FileManager.default.fileExists(atPath: path),
+                       let h = dlopen(path, RTLD_LAZY) {
+                        return (h, path)
+                    }
                 }
             }
         }
@@ -202,8 +220,12 @@ public final class TabyrusBackend: @unchecked Sendable {
     }
 
     public func isModelDownloaded(_ name: String) -> Bool {
-        guard let fn: (@convention(c) (UnsafePointer<CChar>) -> Bool) = sym("tabyrus_is_model_downloaded") else { return false }
-        return name.withCString { fn($0) }
+        guard let fn: (@convention(c) (UnsafePointer<CChar>) -> Bool) = sym("tabyrus_is_model_downloaded") else {
+            print("tabyrus_is_model_downloaded: symbol not found via dlsym")
+            return false
+        }
+        let result = name.withCString { fn($0) }
+        return result
     }
 
     public func getModelCachePath(_ name: String) -> String? {
