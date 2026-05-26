@@ -220,12 +220,13 @@ public final class TabyrusBackend: @unchecked Sendable {
     }
 
     public func isModelDownloaded(_ name: String) -> Bool {
-        guard let fn: (@convention(c) (UnsafePointer<CChar>) -> Bool) = sym("tabyrus_is_model_downloaded") else {
-            print("tabyrus_is_model_downloaded: symbol not found via dlsym")
+        guard let fn: (@convention(c) (UnsafePointer<CChar>) -> Int32) = sym("tabyrus_is_model_downloaded") else {
+            fputs("[tabyrus-swift] isModelDownloaded: dlsym failed for tabyrus_is_model_downloaded\n", stderr)
             return false
         }
         let result = name.withCString { fn($0) }
-        return result
+        fputs("[tabyrus-swift] isModelDownloaded(\(name)) = \(result)\n", stderr)
+        return result != 0
     }
 
     public func getModelCachePath(_ name: String) -> String? {

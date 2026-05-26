@@ -122,8 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
         self.statusItem = statusItem
 
+        fputs("[tabyrus-app] status bar setup complete, refreshing in 1.5s\n", stderr)
+        refreshAll()
         statusRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshAll() }
+            self?.refreshAll()
         }
     }
 

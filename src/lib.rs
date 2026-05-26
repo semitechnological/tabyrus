@@ -282,15 +282,15 @@ pub unsafe extern "C" fn tabyrus_init() {
     CURRENT_MODEL.get_or_init(|| Mutex::new(CompletionModel::Gemma4));
 
     let cache = get_model_cache_dir();
-    println!("Tabyrus Backend v0.2.0 (MLX)");
-    println!("  Cache: {:?}", cache);
+    eprintln!("[tabyrus] Backend v0.2.0 (MLX)");
+    eprintln!("[tabyrus] Cache: {:?}", cache);
 
     for model in [CompletionModel::Gemma4, CompletionModel::Qwen35, CompletionModel::Zeta2] {
         let path = get_model_local_path(&model);
         let ok = path.exists() && path.join("config.json").exists();
-        println!("  {} {}: {}", if ok { "[OK]" } else { "[--]" }, model.as_str(), model.hf_repo_id());
+        eprintln!("[tabyrus] {} {}: {} (path: {:?})", if ok { "[OK]" } else { "[--]" }, model.as_str(), model.hf_repo_id(), path);
     }
-    println!("Tabyrus ready.");
+    eprintln!("[tabyrus] Ready.");
 }
 
 #[no_mangle]
@@ -642,16 +642,21 @@ pub unsafe extern "C" fn tabyrus_download_model(model_name: *const c_char) -> *m
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn tabyrus_is_model_downloaded(model_name: *const c_char) -> bool {
-    let model = match from_c_str(model_name).and_then(|s| parse_model(&s)) { Some(m) => m, None => {
-        println!("is_downloaded: unknown model");
-        return false;
-    }};
+pub unsafe extern "C" fn tabyrus_is_model_downloaded(model_name: *const c_char) -> i32 {
+    let name_str = from_c_str(model_name).unwrap_or_default();
+    let model = match parse_model(&name_str) {
+        Some(m) => m,
+        None => {
+            eprintln!("[tabyrus] is_downloaded: parse_model failed for '{}'", name_str);
+            return 0;
+        }
+    };
     let p = get_model_local_path(&model);
     let exists = p.exists();
     let has_config = exists && p.join("config.json").exists();
-    println!("is_downloaded({}): path={:?} exists={} config={}", model.as_str(), p, exists, has_config);
-    has_config
+    eprintln!("[tabyrus] is_downloaded({}): path={:?} exists={} config={} -> {}",
+        model.as_str(), p, exists, has_config, has_config);
+    if has_config { 1 } else { 0 }
 }
 
 #[no_mangle]
