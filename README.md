@@ -95,7 +95,7 @@ Autocomplete, grammar checking, code reshaping, clipboard classification, and cl
 
 ## Dependency Sources
 
-- **Aurorality UI surface**: the completion overlay uses the in-tree SwiftUI glass helper copied from Aurorality, while Rust resolves `aurorality-core` from `https://github.com/tschk/aurorality.git`.
+- **Aurorality UI surface**: the completion overlay and grammar widget use the in-tree SwiftUI glass helper copied from Aurorality, while Rust resolves `aurorality-core` from `https://github.com/tschk/aurorality.git`.
 - **EqSwift bridge**: Rust resolves `eqswift` from crates.io, and `TabyrusBackend/Package.swift` builds the in-tree Swift binding under `TabyrusBackend/Sources/EqSwift`.
 
 ## Cotabby Benchmark Baseline

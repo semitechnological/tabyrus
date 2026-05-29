@@ -7,6 +7,7 @@
 
 import Cocoa
 import AppKit
+import SwiftUI
 
 protocol GrammarWidgetDelegate: AnyObject {
     func grammarWidget(_ widget: GrammarWidget, didCorrect text: String, suggestions: [String])
@@ -15,14 +16,8 @@ protocol GrammarWidgetDelegate: AnyObject {
 
 class GrammarWidget: NSWindow {
     weak var grammarDelegate: GrammarWidgetDelegate?
-    
-    private var suggestionLabel: NSTextField!
-    private var originalLabel: NSTextField!
-    private var suggestionsStackView: NSStackView!
-    private var applyButton: NSButton!
-    private var dismissButton: NSButton!
-    private var rewordButton: NSButton!
-    
+
+    private var hostingView: NSHostingView<GrammarWidgetContentView>?
     private var currentResult: GrammarResult?
     private let backend: TabyrusBackend
     
@@ -54,82 +49,19 @@ class GrammarWidget: NSWindow {
     
     private func setupUI() {
         guard let contentView = contentView else { return }
-        
-        let containerView = NSView(frame: contentView.bounds)
-        containerView.wantsLayer = true
-        containerView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        contentView.addSubview(containerView)
-        
-        originalLabel = NSTextField(labelWithString: "")
-        originalLabel.font = NSFont.systemFont(ofSize: 11)
-        originalLabel.textColor = NSColor.secondaryLabelColor
-        originalLabel.lineBreakMode = .byTruncatingTail
-        originalLabel.maximumNumberOfLines = 2
-        containerView.addSubview(originalLabel)
-        
-        suggestionLabel = NSTextField(labelWithString: "")
-        suggestionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        suggestionLabel.textColor = NSColor.labelColor
-        suggestionLabel.lineBreakMode = .byWordWrapping
-        suggestionLabel.maximumNumberOfLines = 3
-        containerView.addSubview(suggestionLabel)
-        
-        suggestionsStackView = NSStackView()
-        suggestionsStackView.orientation = .vertical
-        suggestionsStackView.alignment = .leading
-        suggestionsStackView.spacing = 4
-        suggestionsStackView.distribution = .fill
-        containerView.addSubview(suggestionsStackView)
-        
-        let buttonStackView = NSStackView()
-        buttonStackView.orientation = .horizontal
-        buttonStackView.spacing = 8
-        buttonStackView.distribution = .fillEqually
-        containerView.addSubview(buttonStackView)
-        
-        applyButton = NSButton(title: "Apply", target: self, action: #selector(applyCorrection))
-        applyButton.bezelStyle = .rounded
-        applyButton.isEnabled = false
-        buttonStackView.addArrangedSubview(applyButton)
-        
-        rewordButton = NSButton(title: "Reword", target: self, action: #selector(rewordSentence))
-        rewordButton.bezelStyle = .rounded
-        buttonStackView.addArrangedSubview(rewordButton)
-        
-        dismissButton = NSButton(title: "Dismiss", target: self, action: #selector(dismissWidget))
-        dismissButton.bezelStyle = .rounded
-        buttonStackView.addArrangedSubview(dismissButton)
-        
-        containerView.translatesAutoresizingMaskIntoConstraints = false
-        originalLabel.translatesAutoresizingMaskIntoConstraints = false
-        suggestionLabel.translatesAutoresizingMaskIntoConstraints = false
-        suggestionsStackView.translatesAutoresizingMaskIntoConstraints = false
-        buttonStackView.translatesAutoresizingMaskIntoConstraints = false
+
+        let hostingView = NSHostingView(rootView: contentViewState(original: "", result: nil))
+        contentView.addSubview(hostingView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
         
         NSLayoutConstraint.activate([
-            containerView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            containerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            containerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            containerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            
-            originalLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 12),
-            originalLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
-            originalLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
-            
-            suggestionLabel.topAnchor.constraint(equalTo: originalLabel.bottomAnchor, constant: 8),
-            suggestionLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
-            suggestionLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
-            
-            suggestionsStackView.topAnchor.constraint(equalTo: suggestionLabel.bottomAnchor, constant: 8),
-            suggestionsStackView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
-            suggestionsStackView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
-            
-            buttonStackView.topAnchor.constraint(equalTo: suggestionsStackView.bottomAnchor, constant: 12),
-            buttonStackView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
-            buttonStackView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
-            buttonStackView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -12),
-            buttonStackView.heightAnchor.constraint(equalToConstant: 28)
+            hostingView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         ])
+
+        self.hostingView = hostingView
     }
     
     func checkGrammar(_ text: String) {
@@ -199,29 +131,23 @@ class GrammarWidget: NSWindow {
     
     private func showResult(_ result: GrammarResult, original: String) {
         currentResult = result
-        
-        originalLabel.stringValue = "Original: \"\(original)\""
-        suggestionLabel.stringValue = result.corrected
-        
-        for view in suggestionsStackView.arrangedSubviews {
-            suggestionsStackView.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
-        
-        for suggestion in result.suggestions.prefix(3) {
-            let label = NSTextField(labelWithString: suggestion)
-            label.font = NSFont.systemFont(ofSize: 10)
-            label.textColor = NSColor.secondaryLabelColor
-            suggestionsStackView.addArrangedSubview(label)
-        }
-        
-        applyButton.isEnabled = result.corrected != original
+        hostingView?.rootView = contentViewState(original: original, result: result)
         title = "Grammar Check (\(Int(result.confidence * 100))% confidence)"
         
         var frame = self.frame
-        let height = suggestionsStackView.arrangedSubviews.isEmpty ? 100.0 : 120.0
+        let height = result.suggestions.isEmpty ? 128.0 : 156.0
         frame.size.height = height
         setFrame(frame, display: true)
+    }
+
+    private func contentViewState(original: String, result: GrammarResult?) -> GrammarWidgetContentView {
+        GrammarWidgetContentView(
+            original: original,
+            result: result,
+            onApply: { [weak self] in self?.applyCorrection() },
+            onReword: { [weak self] in self?.rewordSentence() },
+            onDismiss: { [weak self] in self?.dismissWidget() }
+        )
     }
     
     func show(at position: NSPoint) {
@@ -262,5 +188,54 @@ class GrammarWidget: NSWindow {
         let insertResult = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, textValue)
         
         return insertResult == .success
+    }
+}
+
+private struct GrammarWidgetContentView: View {
+    let original: String
+    let result: GrammarResult?
+    let onApply: () -> Void
+    let onReword: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let result {
+                Text("Original: \"\(original)\"")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+
+                Text(result.corrected)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(3)
+
+                if !result.suggestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(result.suggestions.prefix(3)), id: \.self) { suggestion in
+                            Text(suggestion)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Button("Apply", action: onApply)
+                        .disabled(result.corrected == original)
+                    Button("Reword", action: onReword)
+                    Button("Dismiss", action: onDismiss)
+                }
+                .buttonStyle(.bordered)
+            } else {
+                EmptyView()
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .glassEffect()
     }
 }
