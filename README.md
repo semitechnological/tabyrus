@@ -96,7 +96,7 @@ Autocomplete, grammar checking, code reshaping, clipboard classification, and cl
 ## Local Sibling Dependencies
 
 - **SwiftUI surface**: use `../aurorality` for future SwiftUI/Aurorality rendering work. The current app shell remains AppKit-based for AX overlays and menu bar control.
-- **EqSwift bridge**: `TabyrusBackend/Package.swift` resolves EqSwift from `../eqswift/swift` at the project level, not the vendored `deps/eqswift` copy.
+- **EqSwift bridge**: `TabyrusBackend/Package.swift` resolves EqSwift from `../eqswift/swift` at the project level.
 
 ## Cotabby Benchmark Baseline
 
