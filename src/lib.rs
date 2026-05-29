@@ -1,11 +1,13 @@
 #![allow(clippy::missing_safety_doc)]
 
 use std::ffi::{CStr, CString};
+use std::fs::File;
+use std::io::Read;
 use std::os::raw::c_char;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 
 static CODE_RESHAPE_ENABLED: OnceLock<AtomicBool> = OnceLock::new();
 static GRAMMAR_ENABLED: OnceLock<AtomicBool> = OnceLock::new();
@@ -86,6 +88,59 @@ fn get_model_cache_dir() -> PathBuf {
 
 fn get_model_local_path(model: &CompletionModel) -> PathBuf {
     get_model_cache_dir().join(model.model_dir_name())
+}
+
+fn safetensors_declared_size(
+    path: &PathBuf,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    let mut file = File::open(path)?;
+    let mut len_bytes = [0_u8; 8];
+    file.read_exact(&mut len_bytes)?;
+    let header_len = u64::from_le_bytes(len_bytes);
+    let mut header = vec![0_u8; header_len as usize];
+    file.read_exact(&mut header)?;
+    let json: serde_json::Value = serde_json::from_slice(&header)?;
+    let max_offset = json
+        .as_object()
+        .into_iter()
+        .flat_map(|object| object.values())
+        .filter_map(|value| value.get("data_offsets"))
+        .filter_map(|offsets| offsets.as_array())
+        .filter_map(|offsets| offsets.get(1))
+        .filter_map(|offset| offset.as_u64())
+        .max()
+        .unwrap_or(0);
+    Ok(8 + header_len + max_offset)
+}
+
+fn safetensors_complete(path: &PathBuf) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    let Ok(expected) = safetensors_declared_size(path) else {
+        return false;
+    };
+    metadata.len() >= expected
+}
+
+fn model_dir_complete(path: &PathBuf) -> bool {
+    if !path.join("config.json").exists() {
+        return false;
+    }
+    let mut has_weights = false;
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let file_path = entry.path();
+        if file_path.extension().and_then(|ext| ext.to_str()) == Some("safetensors") {
+            has_weights = true;
+            if !safetensors_complete(&file_path) {
+                return false;
+            }
+        }
+    }
+    has_weights
 }
 
 fn ensure_cache_dir() -> std::io::Result<()> {
@@ -330,7 +385,7 @@ pub unsafe extern "C" fn tabyrus_init() {
         CompletionModel::Zeta2,
     ] {
         let path = get_model_local_path(&model);
-        let ok = path.exists() && path.join("config.json").exists();
+        let ok = path.exists() && model_dir_complete(&path);
         eprintln!(
             "[tabyrus] {} {}: {} (path: {:?})",
             if ok { "[OK]" } else { "[--]" },
@@ -835,7 +890,7 @@ pub unsafe extern "C" fn tabyrus_download_model(
     let local = get_model_local_path(&model);
     let repo = model.hf_repo_id().to_string();
 
-    if local.exists() && local.join("config.json").exists() {
+    if local.exists() && model_dir_complete(&local) {
         let size = walkdir::WalkDir::new(&local)
             .into_iter()
             .filter_map(|e| e.ok())
@@ -867,16 +922,16 @@ pub unsafe extern "C" fn tabyrus_is_model_downloaded(model_name: *const c_char) 
     };
     let p = get_model_local_path(&model);
     let exists = p.exists();
-    let has_config = exists && p.join("config.json").exists();
+    let complete = exists && model_dir_complete(&p);
     eprintln!(
-        "[tabyrus] is_downloaded({}): path={:?} exists={} config={} -> {}",
+        "[tabyrus] is_downloaded({}): path={:?} exists={} complete={} -> {}",
         model.as_str(),
         p,
         exists,
-        has_config,
-        has_config
+        complete,
+        complete
     );
-    if has_config {
+    if complete {
         1
     } else {
         0
@@ -933,38 +988,47 @@ fn download_hf_model(
         .collect();
 
     std::fs::create_dir_all(local_path)?;
-    let total = Arc::new(std::sync::atomic::AtomicU64::new(0));
-    let mut handles = vec![];
+    let hf_cache = get_model_cache_dir().join(".hf-cache");
+    let api = hf_hub::api::sync::ApiBuilder::new()
+        .with_cache_dir(hf_cache)
+        .with_token(token)
+        .with_progress(false)
+        .with_retries(3)
+        .build()?;
+    let repo = api.model(repo_id.to_string());
+    let mut total = 0;
 
     for path in files {
-        let fp = local_path.join(&path);
-        let tot = Arc::clone(&total);
-        let rid = repo_id.to_string();
-        let tok = token.clone();
-        if let Some(p) = fp.parent() {
-            std::fs::create_dir_all(p).ok();
+        let downloaded = repo.download(&path)?;
+        let destination = local_path.join(&path);
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent)?;
         }
-        handles.push(std::thread::spawn(move || {
-            let u = format!("https://huggingface.co/{}/resolve/main/{}", rid, path);
-            let mut r = ureq::get(&u);
-            if let Some(ref t) = tok {
-                r = r.set("Authorization", &format!("Bearer {}", t));
-            }
-            if let Ok(resp) = r.call() {
-                if let Ok(mut file) = std::fs::File::create(&fp) {
-                    if std::io::copy(&mut resp.into_reader(), &mut file).is_ok() {
-                        if let Ok(meta) = std::fs::metadata(&fp) {
-                            tot.fetch_add(meta.len(), Ordering::Relaxed);
-                        }
-                    }
-                }
-            }
-        }));
+        if destination.exists() {
+            std::fs::remove_file(&destination)?;
+        }
+        link_or_copy_file(&downloaded, &destination)?;
+        total += std::fs::metadata(&destination)?.len();
     }
-    for h in handles {
-        let _ = h.join();
+
+    if !model_dir_complete(local_path) {
+        return Err("downloaded model is incomplete".into());
     }
-    Ok(total.load(Ordering::Relaxed))
+
+    Ok(total)
+}
+
+fn link_or_copy_file(source: &PathBuf, destination: &PathBuf) -> std::io::Result<()> {
+    if std::fs::hard_link(source, destination).is_ok() {
+        return Ok(());
+    }
+    #[cfg(target_family = "unix")]
+    {
+        if std::os::unix::fs::symlink(source, destination).is_ok() {
+            return Ok(());
+        }
+    }
+    std::fs::copy(source, destination).map(|_| ())
 }
 
 #[cfg(test)]
@@ -1030,6 +1094,69 @@ mod tests {
         }
         let m = unsafe { CStr::from_ptr(tabyrus_get_current_model()) };
         assert_eq!(m.to_str().unwrap(), "zeta-2");
+    }
+
+    #[test]
+    fn test_parse_model_accepts_swift_identifiers() {
+        assert!(matches!(
+            parse_model("NexVeridian/zeta-2-4bit"),
+            Some(CompletionModel::Zeta2)
+        ));
+        assert!(matches!(
+            parse_model("Qwen3.5-0.8B"),
+            Some(CompletionModel::Qwen35)
+        ));
+        assert!(matches!(
+            parse_model("mlx-community/gemma-4-e2b-it-4bit"),
+            Some(CompletionModel::Gemma4)
+        ));
+    }
+
+    #[test]
+    fn test_safetensors_completeness_uses_header_offsets() {
+        let dir =
+            std::env::temp_dir().join(format!("tabyrus-safetensors-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let incomplete = dir.join("incomplete.safetensors");
+        write_safetensors_fixture(&incomplete, 128, 32);
+        assert!(!safetensors_complete(&incomplete));
+
+        let complete = dir.join("complete.safetensors");
+        write_safetensors_fixture(&complete, 128, 128);
+        assert!(safetensors_complete(&complete));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_model_dir_requires_complete_weights() {
+        let dir =
+            std::env::temp_dir().join(format!("tabyrus-model-dir-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("config.json"), "{}").unwrap();
+
+        write_safetensors_fixture(&dir.join("model.safetensors"), 128, 32);
+        assert!(!model_dir_complete(&dir));
+
+        write_safetensors_fixture(&dir.join("model.safetensors"), 128, 128);
+        assert!(model_dir_complete(&dir));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn write_safetensors_fixture(path: &std::path::Path, declared: usize, actual: usize) {
+        let header = format!(
+            r#"{{"weight":{{"dtype":"U8","shape":[{}],"data_offsets":[0,{}]}}}}"#,
+            declared, declared
+        );
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&(header.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(header.as_bytes());
+        bytes.extend(std::iter::repeat_n(0_u8, actual));
+        std::fs::write(path, bytes).unwrap();
     }
 
     #[test]
