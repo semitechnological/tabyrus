@@ -40,12 +40,13 @@ All ML logic lives in Rust. Swift is a thin layer handling macOS-native concerns
 - **Apple Silicon** (MLX requires M-series chip)
 - **8GB+ RAM** (16GB recommended for Gemma 4)
 - **Accessibility permissions** (required for text monitoring)
+- **MLX-LM CLI** (`mlx_lm.generate` on `PATH`)
 
 ## Quick Start
 
 ```bash
 # Install brisk build tool (if not installed)
-brew install brisk
+wax install brisk
 
 # Build and run
 brisk run
@@ -67,12 +68,55 @@ Models are downloaded from Hugging Face and cached at `~/Library/Caches/tabyrus/
 
 ```bash
 # Build Rust backend
-cargo build
+cargo build --features mlx
 
 # Build Swift app
 swift build
 # or: brisk build
 ```
+
+## Backend Check
+
+Tabyrus is valid from `~/projects/tabyrus`. The old `~/projects/otto` path can leave stale SwiftPM module cache entries behind; if Swift reports a module cache path containing `otto`, remove `.build/` and rebuild.
+
+The Rust backend is `tabyrus-backend` in `src/lib.rs`. Build it with the default `mlx` feature, then run the Swift shell against the produced `libtabyrus_backend.dylib`:
+
+```bash
+cargo fmt --check
+cargo check --all-targets --all-features
+cargo test --all-targets --all-features
+cargo build --features mlx
+swift build
+swift test
+brisk build
+```
+
+Autocomplete, grammar checking, code reshaping, clipboard classification, and clipboard summarization all route through the Rust FFI boundary and invoke `mlx_lm.generate` against models cached under `~/Library/Caches/tabyrus/models/`. Without a downloaded model, autocomplete and autocorrect return no ML suggestion instead of falling back to cloud inference.
+
+## Local Sibling Dependencies
+
+- **SwiftUI surface**: use `../aurorality` for future SwiftUI/Aurorality rendering work. The current app shell remains AppKit-based for AX overlays and menu bar control.
+- **EqSwift bridge**: `TabyrusBackend/Package.swift` resolves EqSwift from `../eqswift/swift` at the project level, not the vendored `deps/eqswift` copy.
+
+## Cotabby Benchmark Baseline
+
+Cotabby is the comparison target at `~/projects/cotabby-fork`. Benchmark Tabyrus against Cotabby on the same machine by measuring:
+
+- Build health: Tabyrus `cargo check`, `cargo test`, `swift build`, and `brisk build`; Cotabby `xcodebuild -project Cotabby.xcodeproj -scheme Cotabby -destination 'platform=macOS' build`.
+- Suggestion cleanup: prompt echo stripping, chat marker stripping, repeated-tail stripping, newline clipping, and whitespace preservation.
+- Acceptance behavior: Tabyrus inserts accepted autocomplete text at the caret through AX selected text first, then falls back to selected-range replacement. Cotabby keeps a fuller multi-step suggestion session with partial acceptance and live AX reconciliation.
+- Inference latency: Tabyrus MLX subprocess time for `mlx_lm.generate`; Cotabby Apple Intelligence or llama.cpp engine time. Report model name, macOS version, CPU, memory, warmup count, sample count, and whether models were already loaded.
+
+Latest local baseline, measured on macOS 26.5 (25F71), Apple M5 Pro, 48 GB RAM, 15 CPU threads:
+
+| Check | Tabyrus | Cotabby |
+|-------|---------|---------|
+| App build | `brisk build`: 3.43s real | `xcodebuild ... build CODE_SIGNING_ALLOWED=NO`: 9.39s real |
+| Focused autocomplete tests | `swift test`: 6 tests, 0 failures, 0.72s real | `xcodebuild ... test -only-testing:SuggestionTextNormalizerTests -only-testing:SuggestionSessionReconcilerTests`: 30 tests, 0 failures, 5.81s real |
+| Backend tests | `cargo test --all-targets --all-features`: 9 tests, 0 failures | Not applicable; Cotabby runtime is Swift/C++ through `CotabbyInference` |
+| Local model state | Tabyrus MLX model directories present; `mlx_lm.generate` missing on `PATH` | Cotabby test launch reported 0 GGUF models and Foundation model engine available |
+
+The numbers above are build and deterministic suggestion-policy checks. They are not an inference-latency claim because the Tabyrus MLX CLI was not available on `PATH` during the run.
 
 ## Project Structure
 

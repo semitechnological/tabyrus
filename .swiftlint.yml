@@ -1,0 +1,22 @@
+included:
+  - Package.swift
+  - TabyrusBackend/Package.swift
+  - src
+  - Tests
+
+excluded:
+  - .build
+  - deps
+  - TabyrusBackend/Sources
+
+disabled_rules:
+  - force_cast
+  - for_where
+  - function_body_length
+  - identifier_name
+  - large_tuple
+  - line_length
+  - redundant_string_enum_value
+  - trailing_newline
+  - trailing_whitespace
+  - type_name

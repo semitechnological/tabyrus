@@ -131,8 +131,28 @@ final class SuggestionCoordinator: ObservableObject {
     }
 
     private func injectText(_ text: String, into element: AXUIElement) -> Bool {
-        let textValue = text as CFString
-        let result = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, textValue)
+        let selectedTextResult = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString)
+        if selectedTextResult == .success {
+            return true
+        }
+
+        var textValueRef: CFTypeRef?
+        let textValueResult = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &textValueRef)
+        guard textValueResult == .success,
+              let currentValue = textValueRef as? String else { return false }
+
+        var selectedRangeRef: CFTypeRef?
+        var selectedRange: NSRange?
+        if AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &selectedRangeRef) == .success,
+           let selectedRangeRef {
+            var cfRange = CFRange(location: 0, length: 0)
+            if AXValueGetValue(selectedRangeRef as! AXValue, .cfRange, &cfRange) {
+                selectedRange = NSRange(location: cfRange.location, length: cfRange.length)
+            }
+        }
+
+        let newValue = SuggestionAcceptance.textByApplyingInsertion(text, to: currentValue, selectedRange: selectedRange)
+        let result = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, newValue as CFString)
         return result == .success
     }
 

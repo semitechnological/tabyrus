@@ -3,18 +3,18 @@ import PackageDescription
 
 let package = Package(
     name: "TabyrusBackend",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     products: [
-        .library(name: "TabyrusBackend", targets: ["TabyrusBackend"]),
+        .library(name: "TabyrusBackend", targets: ["TabyrusBackend"])
     ],
     dependencies: [
-        .package(name: "EqSwift", path: "../deps/eqswift/swift"),
+        .package(name: "EqSwift", path: "../../eqswift/swift")
     ],
     targets: [
         .target(
             name: "TabyrusBackend",
             dependencies: [.product(name: "EqSwift", package: "EqSwift")],
             exclude: ["lib.rs"]
-        ),
+        )
     ]
 )

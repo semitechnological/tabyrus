@@ -36,7 +36,7 @@ final class ModelManager: ObservableObject {
                 self.downloadingModelName = ""
 
                 switch result {
-                case .success(let r):
+                case .success:
                     self.downloadPercent = 100
                     self.downloadProgress[model.modelIdentifier] = 100
                 case .failure(let e):
@@ -58,8 +58,6 @@ final class ModelManager: ObservableObject {
 
         let totalSteps = 20
         let stepInterval = 1.5
-        var step = 0
-
         Timer.scheduledTimer(withTimeInterval: stepInterval, repeats: true) { [weak self] timer in
             Task { @MainActor in
                 guard let self else { timer.invalidate(); return }
@@ -69,8 +67,9 @@ final class ModelManager: ObservableObject {
                     return
                 }
 
-                step += 1
-                let percent = min(Double(step) / Double(totalSteps) * 95.0, 95.0)
+                let currentPercent = self.downloadProgress[model.modelIdentifier] ?? 0
+                let nextPercent = currentPercent + 95.0 / Double(totalSteps)
+                let percent = min(nextPercent, 95.0)
                 self.downloadPercent = percent
                 self.downloadProgress[model.modelIdentifier] = percent
                 self.objectWillChange.send()

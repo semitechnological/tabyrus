@@ -2,7 +2,7 @@ name: tabyrus
 options:
   bundleIdPrefix: com.tabyrus
   deploymentTarget:
-    macOS: "13.0"
+    macOS: "14.0"
   generateEmptyDirectories: true
   findCarthageFrameworks: false
 targets:

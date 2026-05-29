@@ -7,7 +7,7 @@ description = "AI-powered system-wide autocomplete for macOS with Rust+MLX backe
 
 [app]
 bundle_id = "com.tabyrus.app"
-deployment_target = "13.0"
+deployment_target = "14.0"
 sources = "src"
 resources = []
 frameworks = ["AppKit", "ApplicationServices", "Combine"]
