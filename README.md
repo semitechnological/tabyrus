@@ -111,17 +111,21 @@ Latest local baseline, measured on macOS 26.5 (25F71), Apple M5 Pro, 48 GB RAM, 
 
 | Check | Tabyrus | Cotabby |
 |-------|---------|---------|
-| App build | `brisk build`: 3.43s real | `xcodebuild ... build CODE_SIGNING_ALLOWED=NO`: 9.39s real |
-| Focused autocomplete tests | `swift test`: 6 tests, 0 failures, 0.72s real | `xcodebuild ... test -only-testing:SuggestionTextNormalizerTests -only-testing:SuggestionSessionReconcilerTests`: 30 tests, 0 failures, 5.81s real |
+| App build | `brisk build`: 3.54s real | `xcodebuild ... build CODE_SIGNING_ALLOWED=NO`: 9.39s real |
+| Focused autocomplete tests | `swift test`: 6 tests, 0 failures, 0.40s real | `xcodebuild ... test -only-testing:SuggestionTextNormalizerTests -only-testing:SuggestionSessionReconcilerTests`: 30 tests, 0 failures, 2.04s real |
 | Backend tests | `cargo test --all-targets --all-features`: 9 tests, 0 failures | Not applicable; Cotabby runtime is Swift/C++ through `CotabbyInference` |
 | Local model state | Tabyrus MLX model directories present; `mlx_lm.generate` missing on `PATH` | Cotabby test launch reported 0 GGUF models and Foundation model engine available |
 
 The numbers above are build and deterministic suggestion-policy checks. They are not an inference-latency claim because the Tabyrus MLX CLI was not available on `PATH` during the run.
 
+Practical desktop smoke test: launched `.build/debug/Tabyrus.app`, typed into TextEdit through macOS UI automation, and pressed Tab. TextEdit received the literal Tab and no ghost overlay appeared while `mlx_lm.generate` was unavailable on `PATH`.
+
 ## Project Structure
 
 ```
+Cargo.toml                               # Rust backend crate manifest
 src/
+├── lib.rs                               # Rust MLX backend and C FFI exports
 ├── App/
 │   ├── AppDelegate.swift              # Menu bar, status, downloads
 │   ├── AutoCompleteApp.swift          # NSApplication entry point
@@ -151,7 +155,12 @@ src/
 ├── UI/
 │   ├── CompletionOverlay.swift        # Ghost-text overlay
 │   └── GrammarWidget.swift            # Grammar suggestion panel
-└── lib.rs                             # Rust backend (~700 lines)
+TabyrusBackend/
+├── Package.swift                       # Swift package wrapper for backend bridge
+└── Sources/TabyrusBackend/
+    └── TabyrusBackend.swift            # Reusable Rust FFI Swift wrapper
+Tests/
+└── TabyrusTests/                       # Swift policy tests for autocomplete cleanup
 ```
 
 ## Permissions
