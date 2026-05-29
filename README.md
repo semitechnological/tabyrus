@@ -93,10 +93,10 @@ brisk build
 
 Autocomplete, grammar checking, code reshaping, clipboard classification, and clipboard summarization all route through the Rust FFI boundary and invoke `mlx_lm.generate` against models cached under `~/Library/Caches/tabyrus/models/`. Without a downloaded model, autocomplete and autocorrect return no ML suggestion instead of falling back to cloud inference.
 
-## Local Sibling Dependencies
+## Dependency Sources
 
-- **SwiftUI surface**: use `../aurorality` for future SwiftUI/Aurorality rendering work. The current app shell remains AppKit-based for AX overlays and menu bar control.
-- **EqSwift bridge**: `TabyrusBackend/Package.swift` resolves EqSwift from `../eqswift/swift` at the project level.
+- **Aurorality UI surface**: the completion overlay uses the in-tree SwiftUI glass helper copied from Aurorality, while Rust resolves `aurorality-core` from `https://github.com/tschk/aurorality.git`.
+- **EqSwift bridge**: Rust resolves `eqswift` from crates.io, and `TabyrusBackend/Package.swift` builds the in-tree Swift binding under `TabyrusBackend/Sources/EqSwift`.
 
 ## Cotabby Benchmark Baseline
 

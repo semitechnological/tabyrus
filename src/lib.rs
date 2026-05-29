@@ -1,3 +1,5 @@
+#![allow(clippy::missing_safety_doc)]
+
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::path::PathBuf;
@@ -229,8 +231,6 @@ impl HardwareInfo {
             "gemma-4"
         } else if is_apple_silicon && total_ram >= 8.0 {
             "qwen-3.5"
-        } else if is_apple_silicon {
-            "zeta-2"
         } else {
             "zeta-2"
         };
@@ -531,11 +531,11 @@ fn ml_complete(text: &str) -> Option<(String, String, f32)> {
 fn generate_text(prompt: &str, max_tokens: usize) -> Option<String> {
     #[cfg(feature = "mlx")]
     {
-        return mlx_generate_inner(prompt, max_tokens);
+        mlx_generate_inner(prompt, max_tokens)
     }
     #[cfg(not(feature = "mlx"))]
     {
-        return fallback_mlx_generate(prompt, max_tokens);
+        fallback_mlx_generate(prompt, max_tokens)
     }
 }
 
@@ -696,8 +696,8 @@ fn run_mlx_prompt(prompt: &str, max_tokens: usize) -> Option<String> {
 }
 
 fn strip_prompt_echo(output: &str, prompt: &str) -> String {
-    if output.starts_with(prompt) {
-        output[prompt.len()..].trim().to_string()
+    if let Some(stripped) = output.strip_prefix(prompt) {
+        stripped.trim().to_string()
     } else {
         output.to_string()
     }

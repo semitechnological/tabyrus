@@ -10,7 +10,7 @@ bundle_id = "com.tabyrus.app"
 deployment_target = "14.0"
 sources = "src"
 resources = []
-frameworks = ["AppKit", "ApplicationServices", "Combine"]
+frameworks = ["AppKit", "ApplicationServices", "Combine", "SwiftUI"]
 linker_flags = ["-Ltarget/debug", "-ltabyrus_backend"]
 swift_flags = []
 

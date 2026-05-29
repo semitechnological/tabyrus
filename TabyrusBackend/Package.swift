@@ -7,13 +7,20 @@ let package = Package(
     products: [
         .library(name: "TabyrusBackend", targets: ["TabyrusBackend"])
     ],
-    dependencies: [
-        .package(name: "EqSwift", path: "../../eqswift/swift")
-    ],
+    dependencies: [],
     targets: [
+        .systemLibrary(
+            name: "eqswiftFFI",
+            path: "Sources/eqswiftFFI"
+        ),
+        .target(
+            name: "EqSwift",
+            dependencies: ["eqswiftFFI"],
+            path: "Sources/EqSwift"
+        ),
         .target(
             name: "TabyrusBackend",
-            dependencies: [.product(name: "EqSwift", package: "EqSwift")],
+            dependencies: ["EqSwift"],
             exclude: ["lib.rs"]
         )
     ]

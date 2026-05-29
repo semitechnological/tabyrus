@@ -1,16 +1,17 @@
 import Cocoa
+import SwiftUI
 
 final class CompletionOverlay {
     private var window: NSWindow?
-    private var textField: NSTextField?
+    private var hostingView: NSHostingView<CompletionOverlaySuggestionView>?
 
     func show(suggestion: String, at caretRect: CGRect, in elementFrame: CGRect) {
         hide()
         buildWindowIfNeeded()
 
-        guard let window, let textField else { return }
+        guard let window, let hostingView else { return }
 
-        textField.stringValue = suggestion
+        hostingView.rootView = CompletionOverlaySuggestionView(suggestion: suggestion)
 
         let origin = NSPoint(
             x: caretRect.maxX + 4,
@@ -47,25 +48,32 @@ final class CompletionOverlay {
         w.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle, .stationary]
         w.level = .floating
 
-        let tf = NSTextField(frame: w.contentView!.bounds)
-        tf.isEditable = false
-        tf.isBordered = false
-        tf.backgroundColor = .clear
-        tf.textColor = NSColor.systemGray.withAlphaComponent(0.65)
-        tf.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        tf.alignment = .left
-        tf.maximumNumberOfLines = 1
-        tf.lineBreakMode = .byTruncatingTail
+        let hostingView = NSHostingView(rootView: CompletionOverlaySuggestionView(suggestion: ""))
 
-        w.contentView?.addSubview(tf)
-        tf.translatesAutoresizingMaskIntoConstraints = false
+        w.contentView?.addSubview(hostingView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            tf.leadingAnchor.constraint(equalTo: w.contentView!.leadingAnchor, constant: 2),
-            tf.trailingAnchor.constraint(equalTo: w.contentView!.trailingAnchor, constant: -2),
-            tf.centerYAnchor.constraint(equalTo: w.contentView!.centerYAnchor)
+            hostingView.leadingAnchor.constraint(equalTo: w.contentView!.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: w.contentView!.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: w.contentView!.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: w.contentView!.bottomAnchor)
         ])
 
         self.window = w
-        self.textField = tf
+        self.hostingView = hostingView
+    }
+}
+
+private struct CompletionOverlaySuggestionView: View {
+    let suggestion: String
+
+    var body: some View {
+        Text(suggestion)
+            .font(.system(size: 14, weight: .regular, design: .monospaced))
+            .foregroundStyle(Color.secondary.opacity(0.75))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .padding(.horizontal, 2)
+            .glassEffect()
     }
 }

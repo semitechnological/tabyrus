@@ -19,6 +19,8 @@ dirs = "5.0"
 thiserror = "1.0"
 ureq = { version = "2.9", features = ["json"] }
 walkdir = "2.4"
+eqswift = "0.1.1"
+aurorality-core = { git = "https://github.com/tschk/aurorality.git", rev = "49984c2dbbc1454a866267c22c7b81132f6ca50b", version = "0.1.0" }
 
 [features]
 default = ["mlx"]
